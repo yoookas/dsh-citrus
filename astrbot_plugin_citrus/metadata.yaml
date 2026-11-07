@@ -1,0 +1,6 @@
+name: astrbot_plugin_citrus
+display_name: 柑橘 · 知乎
+short_desc: 让机器人真的去知乎看：热榜、问题、高赞回答、评论区观点
+desc: 基于 citrus 的知乎读接口。配置一份浏览器 Cookie 后，模型可以在用户问知乎热榜、某个问题及回答、评论区观点时自动抓取真实内容再总结；也提供 /知乎热榜、/知乎搜、/知乎看、/知乎评论 等确定性指令。只读，不点赞不评论不关注。
+version: "26.11.01"
+author: citrus

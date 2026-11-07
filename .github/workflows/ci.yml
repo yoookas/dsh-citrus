@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 跑插件测试
+        working-directory: astrbot_plugin_citrus
+        run: python -m unittest discover -s tests -t . -v
+
+      - name: 校验配置文件
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          json.loads(pathlib.Path("astrbot_plugin_citrus/_conf_schema.json").read_text(encoding="utf-8"))
+          print("_conf_schema.json OK")
+          PY
+
+      - name: 试打包（不发布）
+        run: python scripts/build_zip.py

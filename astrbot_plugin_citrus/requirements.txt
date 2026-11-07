@@ -1,0 +1,2 @@
+# 本插件不依赖任何第三方库。
+# citrus 只用 Python 标准库（要求 Python 3.11+，AstrBot 4.x 自带 3.12）。

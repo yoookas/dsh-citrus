@@ -1,0 +1,153 @@
+name: Release
+
+# 两种触发方式：
+#   1. 手动点 Run workflow —— 自动算出 YY.MM.TT（本月第几次发布），打 tag 并发版；
+#   2. 自己推一个 vYY.MM.TT 格式的 tag —— 按 tag 里的版本号发版。
+on:
+  workflow_dispatch:
+    inputs:
+      note:
+        description: 本次发布的补充说明（可选）
+        required: false
+        default: ""
+  push:
+    tags:
+      - "v[0-9][0-9].[0-9][0-9].[0-9][0-9]"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Shanghai
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: 检出代码（要完整 tag 历史来数版本号）
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 跑测试
+        working-directory: astrbot_plugin_citrus
+        run: python -m unittest discover -s tests -t . -v
+
+      - name: 计算版本号（YY.MM.TT）
+        id: ver
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "push" ]; then
+            VERSION="${REF_NAME#v}"
+            if ! printf "%s" "$VERSION" | grep -Eq "^[0-9]{2}\.[0-9]{2}\.[0-9]{2}$"; then
+              echo "标签 $REF_NAME 不符合 YY.MM.TT 格式" >&2
+              exit 1
+            fi
+            echo "按 tag 发版：$VERSION"
+          else
+            PREFIX="$(date +%y.%m)"
+            MAX=0
+            for tag in $(git tag -l "v${PREFIX}.*"); do
+              n="${tag##*.}"
+              n=$((10#$n))
+              if [ "$n" -gt "$MAX" ]; then MAX=$n; fi
+            done
+            TT="$(printf "%02d" $((MAX + 1)))"
+            VERSION="${PREFIX}.${TT}"
+            echo "自动编号：$PREFIX 第 $TT 次"
+          fi
+          printf "version=%s\n" "$VERSION" >> "$GITHUB_OUTPUT"
+          printf "tag=v%s\n" "$VERSION" >> "$GITHUB_OUTPUT"
+          echo "本次发布：v$VERSION"
+
+      - name: 写入插件版本号
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: python scripts/bump_version.py "$VERSION"
+
+      - name: 提交版本号并打 tag（仅手动触发）
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- astrbot_plugin_citrus/metadata.yaml; then
+            echo "版本号没变化，跳过提交"
+          else
+            git add astrbot_plugin_citrus/metadata.yaml
+            git commit -m "chore(release): $VERSION"
+            git push origin "HEAD:$DEFAULT_BRANCH"
+          fi
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "tag $TAG 已存在，跳过"
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+
+      - name: 打包 zip
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: python scripts/build_zip.py "$VERSION"
+
+      - name: 生成发布说明
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          NOTE: ${{ github.event.inputs.note }}
+        run: |
+          set -euo pipefail
+          SUM="$(cut -d" " -f1 "dist/astrbot_plugin_citrus_$VERSION.zip.sha256")"
+          {
+            echo "## 柑橘 · 知乎 v$VERSION"
+            echo ""
+            echo "版本号规则 **YY.MM.TT**：年.月.本月第几次发布。"
+            echo ""
+            if [ -n "$NOTE" ]; then
+              echo "> $NOTE"
+              echo ""
+            fi
+            echo "### 安装"
+            echo "1. 下载下面的 astrbot_plugin_citrus_$VERSION.zip"
+            echo "2. AstrBot WebUI → 插件 → 上传插件"
+            echo "3. 插件配置里粘贴浏览器复制的 cURL，保存后发 /知乎状态 自检"
+            echo ""
+            echo "### 校验"
+            echo "```"
+            echo "$SUM  astrbot_plugin_citrus_$VERSION.zip"
+            echo "```"
+          } > dist/notes.md
+          cat dist/notes.md
+
+      - name: 发布 Release
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG 已存在，改为覆盖附件"
+            gh release upload "$TAG" "dist/astrbot_plugin_citrus_$VERSION.zip" "dist/astrbot_plugin_citrus_$VERSION.zip.sha256" --clobber
+          else
+            gh release create "$TAG" \
+              "dist/astrbot_plugin_citrus_$VERSION.zip" \
+              "dist/astrbot_plugin_citrus_$VERSION.zip.sha256" \
+              --title "v$VERSION" \
+              --notes-file dist/notes.md \
+              --latest
+          fi
