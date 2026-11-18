@@ -28,11 +28,12 @@ for (const name of readdirSync(DIST)) {
   if (name.startsWith('dsh-citrus-')) rmSync(join(DIST, name), { force: true });
 }
 
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const npm = process.platform === 'win32' ? 'npm' : 'npm';
 const output = execFileSync(npm, ['pack', PLUGIN, '--pack-destination', DIST, '--json'], {
   cwd: ROOT,
   encoding: 'utf8',
-  stdio: ['ignore', 'pipe', 'inherit']
+  stdio: ['ignore', 'pipe', 'inherit'],
+  shell: process.platform === 'win32'
 });
 const packed = JSON.parse(output)[0];
 const source = join(DIST, packed.filename);
