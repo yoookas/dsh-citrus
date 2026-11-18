@@ -5,9 +5,10 @@
  *   1. 复制插件到 <DSH_HOME>/plugins/dsh-citrus；
  *   2. 在插件目录里建一个 node_modules 链接，指向 <DSH_HOME>/profiles/node_modules，
  *      让插件能解析 @deepseek-ai/dsh-tools 这些宿主包；
- *   3. 往 profile 的 cordis.patch.yml 里插入/替换一段带标记的配置。
+ *   3. 把它登记成 profile bundle（package.json 里的依赖 + dsh.profile.bundles），
+ *      同时清掉旧版 install 脚本留下的 cordis.patch.yml 标记块。
  *
- * 幂等：重复运行只会更新那段标记块，不会重复插入。
+ * 幂等：重复运行只会更新已有登记，不会重复插入。
  *
  *   node scripts/install.mjs                 # 装进当前 profile（默认 desktop）
  *   node scripts/install.mjs --profile web   # 装进指定 profile
@@ -15,10 +16,10 @@
  *   node scripts/install.mjs --uninstall     # 移除配置块和插件目录
  */
 
-import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..');
@@ -38,13 +39,11 @@ const profile = option('--profile', process.env.DSH_PROFILE || 'desktop');
 const profileDir = join(home, 'profiles', profile);
 const patchFile = join(profileDir, 'cordis.patch.yml');
 const target = join(home, 'plugins', 'dsh-citrus');
-const sharedModules = join(home, 'profiles', 'node_modules');
-const sharedLink = join(sharedModules, 'dsh-citrus');
+// 宿主包从 profile 的 node_modules 解析；旧版把它放在 <DSH_HOME>/profiles/node_modules。
+const profileModules = join(profileDir, 'node_modules');
 
 const START = '# >>> dsh-citrus';
 const END = '# <<< dsh-citrus';
-
-const q = (value) => "'" + String(value).replace(/'/g, "''") + "'";
 
 function log(message) {
   console.log((dryRun ? '[dry-run] ' : '') + message);
@@ -58,21 +57,6 @@ function backupPatch() {
   return backup;
 }
 
-function patchBlock() {
-  // 带版本查询串：Node 会按不同 URL 重新加载模块，client-modules 也会重新抓取
-  // 客户端 bundle，所以重装后不需要重启 DSH（裸包名会命中 ESM 缓存）。
-  const entry = pathToFileURL(join(target, 'lib', 'index.js')).href + '?v=' + Date.now().toString(36);
-  return [
-    START + ' (由 scripts/install.mjs 管理，重装会覆盖这一段)',
-    '- insert:',
-    '    - id: dsh-citrus',
-    '      name: ' + q(entry),
-    '      config:',
-    '        cookieFile: ' + q(join(home, 'dsh-citrus', 'zhihu.cookie')),
-    END
-  ].join('\n');
-}
-
 /** 找到标记块的首尾下标；没有返回 null。 */
 function findBlock(text) {
   const start = text.indexOf(START);
@@ -80,36 +64,6 @@ function findBlock(text) {
   const end = text.indexOf(END, start);
   if (end < 0) return null;
   return { start, end: end + END.length };
-}
-
-function replaceBlock(text, block) {
-  const found = findBlock(text);
-  if (!found) return '';
-  return text.slice(0, found.start) + block + text.slice(found.end);
-}
-
-function updatePatch() {
-  if (!existsSync(patchFile)) {
-    throw new Error('找不到 ' + patchFile + '：这个 profile 还没初始化过，先启动一次 DeepSeek Harness。');
-  }
-  let text = readFileSync(patchFile, 'utf8');
-  const backup = backupPatch();
-  const block = patchBlock();
-
-  if (findBlock(text)) {
-    text = replaceBlock(text, block);
-    log('已更新 cordis.patch.yml 里的 dsh-citrus 配置块');
-  } else if (text.replace(/\s+/g, '') === '[]') {
-    const comments = text.split('\n').filter((line) => line.trim().startsWith('#'));
-    const header = comments.length ? comments.join('\n') + '\n' : '';
-    text = header + block + '\n';
-    log('已把 dsh-citrus 配置块写进 cordis.patch.yml');
-  } else {
-    text = text.replace(/\s*$/, '\n') + '\n' + block + '\n';
-    log('已把 dsh-citrus 配置块追加到 cordis.patch.yml');
-  }
-  if (backup) log('原文件备份：' + backup);
-  if (!dryRun) writeFileSync(patchFile, text, 'utf8');
 }
 
 function removePatch() {
@@ -135,46 +89,21 @@ function linkModules() {
     log('node_modules 链接已存在');
     return;
   }
-  if (!existsSync(sharedModules)) {
-    throw new Error('找不到 ' + sharedModules + '：DeepSeek Harness 还没初始化过 profile。');
+  if (!existsSync(profileModules)) {
+    // 没有这个目录也能跑：插件作为 profile bundle 由 Host 自己的模块图解析依赖。
+    // 这里只影响「直接 node 跑插件文件」这类场景，所以给个提醒就好。
+    log('提示：没找到 ' + profileModules + '，跳过 node_modules 链接（作为 bundle 运行时不影响）');
+    return;
   }
   if (dryRun) {
-    log('会创建 node_modules 链接 -> ' + sharedModules);
+    log('会创建 node_modules 链接 -> ' + profileModules);
     return;
   }
   try {
-    symlinkSync(sharedModules, join(target, 'node_modules'), 'junction');
-    log('已创建 node_modules 链接 -> ' + sharedModules);
+    symlinkSync(profileModules, join(target, 'node_modules'), 'junction');
+    log('已创建 node_modules 链接 -> ' + profileModules);
   } catch (error) {
-    throw new Error('创建 node_modules 链接失败：' + error.message + '\n可以手动把 ' + sharedModules + ' 链接到 ' + join(target, 'node_modules'));
-  }
-}
-
-function linkSharedPackage() {
-  const stat = existsSync(sharedLink) ? lstatSync(sharedLink) : null;
-  if (stat !== null && !stat.isSymbolicLink()) {
-    throw new Error(sharedLink + ' 已存在且不是链接，不敢覆盖；请先手动移走它。');
-  }
-  if (stat !== null && stat.isSymbolicLink()) {
-    try {
-      if (resolve(sharedLink) === resolve(target)) {
-        log('profiles/node_modules/dsh-citrus 链接已存在');
-        return;
-      }
-    } catch {
-      /* 坏链接按需要重建 */
-    }
-    if (!dryRun) rmSync(sharedLink, { force: true });
-  }
-  if (dryRun) {
-    log('会创建 profiles/node_modules/dsh-citrus 链接 -> ' + target);
-    return;
-  }
-  try {
-    symlinkSync(target, sharedLink, 'junction');
-    log('已创建 profiles/node_modules/dsh-citrus 链接');
-  } catch (error) {
-    throw new Error('创建 profiles/node_modules/dsh-citrus 链接失败：' + error.message);
+    throw new Error('创建 node_modules 链接失败：' + error.message + '\n可以手动把 ' + profileModules + ' 链接到 ' + join(target, 'node_modules'));
   }
 }
 
@@ -260,10 +189,6 @@ function main() {
   if (uninstall) {
     removePatch();
     removeProfileBundle();
-    if (existsSync(sharedLink) && lstatSync(sharedLink).isSymbolicLink()) {
-      if (!dryRun) rmSync(sharedLink, { force: true });
-      log('已删除 profiles/node_modules/dsh-citrus 链接');
-    }
     if (existsSync(target)) {
       log('删除插件目录：' + target);
       if (!dryRun) rmSync(target, { recursive: true, force: true });
@@ -277,7 +202,6 @@ function main() {
   }
   installFiles();
   linkModules();
-  linkSharedPackage();
   removePatch();
   ensureProfileBundle();
   printNextSteps();

@@ -63,8 +63,8 @@ node scripts/install.mjs --uninstall     # 卸载
 卡片内容：
 
 - **平台 tab**：一个平台一个页签（现在只有「知乎」）；加平台不用改页面结构，`PLATFORMS` 里加一项就多一个 tab。
-- **Cookie**：密码框，粘贴浏览器复制的 cURL / Cookie；保存后不会回显。留空表示"不修改"。
-- **条数/字数**：热榜、搜索、评论条数，正文/评论/摘要字数上限——每个平台各自一份。
+- **全部配置字段**：schema 里 14 个字段面板都能改——Cookie（密码框，留空=不修改）、Cookie 文件路径、
+  6 个条数/字数、附带高赞回答数、提示词开关、请求间隔/抖动/超时/重试次数。
 - **保存设置**：写进**当前 profile 的 Cordis patch**（也就是这个 bundle 那一行的 `config`），**下一次工具调用立即生效**，不用重启。
 - **恢复默认**：清掉这些用户覆盖，回退到组合配置里的值（包括 schema 默认值）。
 - **清除「知乎」Cookie**：只清当前页签这个平台的 Cookie，回退到本地 Cookie 文件（`dsh-citrus auth` 写的那份）。
@@ -139,9 +139,12 @@ Cookie 文件默认在 `<DSH_HOME>/dsh-citrus/zhihu.cookie`，换号后下一次
 
 1. `lib/config.js`：`platforms` 里加一段 schema；
 2. `lib/platforms/<id>/`：加适配器，并在 `lib/platforms/registry.js` 的 `PLATFORM_IDS` 里登记；
-3. `lib/client.js`：`PLATFORMS` 数组里加一项（tab、Cookie 框、条数字段都跟着出来）。
+3. `lib/client.js`：`PLATFORMS` 数组里加一项，字段按 `kind` 声明：
+   `number`（数字框，留空=取消覆盖）、`text`（文本，留空=取消覆盖）、
+   `secret`（密码框，留空=不修改）、`toggle`（开关，写布尔值）。
 
-宿主的工具层只认 `platformConfig(config, id)`，不用逐个改。
+tab、控件、写回语义都由 `PLATFORMS` 决定，不用再写 UI 代码。
+宿主的工具层只认 `platformConfig(config, id)`，也不用逐个改。
 
 ---
 
@@ -167,7 +170,7 @@ cd dsh-citrus
 # 宿主包解析：本地开发时把 <DSH_HOME>/profiles/node_modules 链接成 node_modules
 # Windows: mklink /J node_modules %USERPROFILE%\.dsh\profiles\node_modules
 
-npm test                       # 39 个离线用例（假知乎 + 假 React，不联网）
+npm test                       # 43 个离线用例（假知乎 + 假 React，不联网）
 node --check lib/index.js      # 语法检查
 node --check lib/client.js
 ```
