@@ -1,9 +1,12 @@
 /**
- * dsh-citrus 的浏览器半侧：在「设置 -> 插件 -> 插件配置」里渲染一张卡片。
+ * dsh-citrus 的浏览器半侧。
  *
- * 只依赖 shell 播种的 react（通过 require("react")），不引入其它包。
- * 卡片本身只注册到 slots（启动时一定存在）；settingsScope 用 ctx.inject 延迟绑定，
- * 避免插件在设置服务还没注册时被标记成「等待激活」。
+ * 桌面端（0.1.5-rc.2）没有 settings.plugin.item，配置页走的是另一套 slot：
+ *   * settings.section —— 设置里新增一个「知乎」分区（最直观）；
+ *   * plugins.item     —— 「插件」面板 → 内置插件配置里的卡片。
+ *
+ * 两边共用 ctx.configForms 的同一个命名空间表单，数据来自 Host 的 settings 服务。
+ * 只硬依赖 slots；configForms 用 ctx.inject 延迟挂载，避免启动时被标成等待激活。
  */
 window.__ModuleLoader__.load({
   id: "dsh-citrus",
@@ -15,6 +18,9 @@ window.__ModuleLoader__.load({
     const React = require("react");
 
     const NAMESPACE = "dsh-citrus";
+    const SECTION_ID = "dsh-citrus";
+    const TITLE = "知乎";
+    const SUMMARY = "配置知乎 Cookie 与返回条数";
 
     const NUMERIC_FIELDS = [
       { key: "hotLimit", label: "热榜条数", hint: "1-30；知乎热榜不给翻页，30 就是上限。", min: 1, max: 30 },
@@ -110,10 +116,23 @@ window.__ModuleLoader__.load({
       );
     }
 
+    function SummaryCard(props) {
+      const snapshot = React.useSyncExternalStore(
+        (listener) => props.form.subscribe(listener),
+        () => props.form.getSnapshot(),
+        () => props.form.getSnapshot()
+      );
+      const hot = valueOf(snapshot, "hotLimit");
+      return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: "2px" } },
+        React.createElement("span", { style: styles.description }, SUMMARY),
+        hot ? React.createElement("span", { style: styles.hint }, "热榜默认 " + hot + " 条") : null
+      );
+    }
+
     function CitrusCardView(props) {
-      const scope = props.scope;
-      const subscribe = React.useCallback((listener) => scope.subscribe(listener), [scope]);
-      const read = React.useCallback(() => scope.getSnapshot(), [scope]);
+      const form = props.form;
+      const subscribe = React.useCallback((listener) => form.subscribe(listener), [form]);
+      const read = React.useCallback(() => form.getSnapshot(), [form]);
       const snapshot = React.useSyncExternalStore(subscribe, read, read);
       const [draft, setDraft] = React.useState({});
       const [saving, setSaving] = React.useState(false);
@@ -163,19 +182,19 @@ window.__ModuleLoader__.load({
           setMessage({ kind: "error", text: "没有改动需要保存。" });
           return;
         }
-        run(() => scope.mutate(ops, snapshot.revision), "已保存，下一次工具调用立即生效。");
+        run(() => form.mutate(ops, snapshot.revision), "已保存，下一次工具调用立即生效。");
       };
 
       const clearCookie = () => {
         if (!writable) return;
-        run(() => scope.unset("cookie"), "已清除保存的 Cookie；会回退到 Cookie 文件或组合配置。");
+        run(() => form.unset("cookie"), "已清除保存的 Cookie；会回退到 Cookie 文件或组合配置。");
       };
 
       const resetAll = () => {
         if (!writable) return;
         const ops = NUMERIC_FIELDS.map((field) => ({ op: "unset", path: [field.key] }));
         ops.push({ op: "unset", path: ["cookie"] });
-        run(() => scope.mutate(ops, snapshot.revision), "已恢复默认（不会删除本地 Cookie 文件）。");
+        run(() => form.mutate(ops, snapshot.revision), "已恢复默认（不会删除本地 Cookie 文件）。");
       };
 
       if (!snapshot || snapshot.status === "unavailable") {
@@ -245,24 +264,48 @@ window.__ModuleLoader__.load({
       );
     }
 
-    /** 浏览器半侧只硬依赖 slots；settingsScope 在设置页打开时一定已经就绪。 */
+    /** 只硬依赖 slots；configForms 在设置界面挂载后就绪。 */
     const inject = ["slots"];
 
     /**
-     * 绑定命名空间并把卡片注册进「可配置插件」标签页。
-     * settingsScope 用 ctx.inject 延迟绑定：父 fiber 启动即激活，不会出现在
-     * client-modules 的「waiting for activation」列表里。
+     * 注册两处配置入口：
+     *   * settings.section —— 设置里的「知乎」分区；
+     *   * plugins.item     —— 「插件」面板里的「知乎内容」卡片。
+     * 两个 slot 都只在 Host 服务 dsh-citrus 命名空间期间注册。
      */
     function apply(ctx) {
-      ctx.inject(["settingsScope"], (scopeCtx) => {
-        const scope = scopeCtx.settingsScope.bind({ namespace: NAMESPACE });
-        const Card = () => React.createElement(CitrusCardView, { scope });
-        scopeCtx.slots.inject("settings.plugin.item", function* () {
-          yield scopeCtx.slots.register({
-            name: "settings.plugin.item",
-            key: NAMESPACE
-          }, Card);
-        });
+      ctx.inject(["configForms"], (formsCtx) => {
+        const form = formsCtx.configForms.get(NAMESPACE);
+        const Page = (props) => React.createElement(CitrusCardView, { form, close: props ? props.close : undefined });
+        const Summary = () => React.createElement(SummaryCard, { form });
+
+        formsCtx.effect(() => formsCtx.configForms.whileServed([NAMESPACE], () => {
+          const disposers = [];
+          disposers.push(formsCtx.slots.inject("settings.section", () => formsCtx.slots.register({
+            name: "settings.section",
+            id: SECTION_ID,
+            order: 18,
+            label: () => TITLE
+          }, Page)));
+          disposers.push(formsCtx.slots.inject("plugins.item", () => formsCtx.slots.register({
+            name: "plugins.item",
+            id: SECTION_ID,
+            order: 50,
+            label: () => TITLE + "内容",
+            inject: () => ({ hooks: {} })
+          }, (props) => (props && props.view === "summary"
+            ? React.createElement(Summary, null)
+            : React.createElement(Page, props)))));
+          return () => {
+            for (const dispose of disposers) {
+              try {
+                dispose();
+              } catch {
+                /* 已释放 */
+              }
+            }
+          };
+        }), "dsh-citrus: config surfaces");
       });
     }
 

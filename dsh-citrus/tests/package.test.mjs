@@ -23,7 +23,9 @@ test('package.json 声明了 web 客户端半侧', () => {
 test('client.js 是 ModuleLoader 包并按命名空间注册卡片', () => {
   assert.ok(bundle.includes('window.__ModuleLoader__.load'));
   assert.ok(bundle.includes('id: "dsh-citrus"'));
-  assert.ok(bundle.includes('settings.plugin.item'));
+  assert.ok(bundle.includes('settings.section'));
+  assert.ok(bundle.includes('plugins.item'));
   assert.ok(bundle.includes('dsh-citrus'));
-  assert.ok(bundle.includes('settingsScope'));
+  assert.ok(bundle.includes('configForms'));
+  assert.ok(bundle.includes('whileServed'));
 });
