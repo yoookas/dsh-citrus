@@ -15,6 +15,7 @@
 | `zhihu_search` | 找某个话题下的问题/回答/文章/用户 | `query`、`limit`、`kind` |
 | `zhihu_read` | 读问题或回答正文（问题会带高赞回答） | `ref`、`with_answers`、`content_chars` |
 | `zhihu_comments` | 评论区怎么看、有哪些不同意见 | `ref`、`limit`、`sort` |
+| `zhihu_status` | 排查「装没装好 / 设置生效没有」：返回命名空间、client bundle、Loader 条目和当前值 | 无 |
 
 另外，当工具在当前会话可见时，会往系统提示词里加一句「知乎内容要现场抓，别凭记忆编」。
 
@@ -34,8 +35,8 @@ node scripts/install.mjs
 它会：
 
 1. 把插件复制到 `<DSH_HOME>/plugins/dsh-citrus`；
-2. 在插件目录建一个 `node_modules` 链接，指向 `<DSH_HOME>/profiles/node_modules`（解析宿主包）；
-3. 往当前 profile 的 `cordis.patch.yml` 里插入一段带标记的配置（幂等，可重复跑）。
+2. 在插件目录建一个 `node_modules` 链接，指向 `<DSH_HOME>/profiles/<profile>/node_modules`（解析宿主包；找不到就跳过）；
+3. 把它登记成 profile bundle（`package.json` 的依赖 + `dsh.profile.bundles`），并清掉旧脚本留下的配置块。
 
 可选参数：
 
@@ -162,13 +163,30 @@ tab、控件、写回语义都由 `PLATFORMS` 决定，不用再写 UI 代码。
 
 ---
 
+## 自检
+
+怀疑没装好、或者改完面板没生效时，让模型跑一次 `zhihu_status`（或 `zhihu_hot` 带 `limit: 0`，不发上游请求），返回的字段都能直接核对：
+
+| 字段 | 期望 |
+|---|---|
+| `host.namespaceRegistered` | `true`——配置命名空间在，面板才有对象可改 |
+| `host.values.hotLimit` 等 | 面板上设的值；改完面板再跑一次应该跟着变 |
+| `clientModules.hasCitrus` | `true`——浏览器半侧进了启动图，界面才有入口 |
+| `loader.entries[].fiber` | 不是 `null`——插件条目真的起来了 |
+
+> **改完宿主代码要重启一次 DeepSeek Harness。** 开关插件只会重跑入口文件，
+> 被 import 过的模块仍在 Node 的 ESM 缓存里，不重启不会加载新版本；
+> 浏览器半侧是按文件 mtime 出 rev 的，刷新页面（Ctrl+R）就够。
+
+---
+
 ## 开发
 
 ```bash
 cd dsh-citrus
 
-# 宿主包解析：本地开发时把 <DSH_HOME>/profiles/node_modules 链接成 node_modules
-# Windows: mklink /J node_modules %USERPROFILE%\.dsh\profiles\node_modules
+# 宿主包解析：本地开发时把 <DSH_HOME>/profiles/<profile>/node_modules 链接成 node_modules
+# Windows: mklink /J node_modules %USERPROFILE%\.dsh\profiles\desktop\node_modules
 
 npm test                       # 43 个离线用例（假知乎 + 假 React，不联网）
 node --check lib/index.js      # 语法检查
