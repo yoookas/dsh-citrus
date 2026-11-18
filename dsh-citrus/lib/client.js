@@ -19,7 +19,7 @@ window.__ModuleLoader__.load({
 
     const NAMESPACE = "dsh-citrus";
     const SECTION_ID = "dsh-citrus";
-    const TITLE = "Citrus";
+    const TITLE = "citrus";
     const SUMMARY = "配置知乎 Cookie 与返回条数（后续支持更多平台）";
 
     const NUMERIC_FIELDS = [
@@ -199,14 +199,14 @@ window.__ModuleLoader__.load({
 
       if (!snapshot || snapshot.status === "unavailable") {
         return React.createElement("div", { style: styles.root },
-          React.createElement("h3", { style: styles.title }, "Citrus · 知乎"),
+          React.createElement("h3", { style: styles.title }, "citrus · 知乎"),
           React.createElement("p", { style: styles.hint }, "当前连接没有开放 dsh-citrus 设置。")
         );
       }
 
       return React.createElement("div", { style: styles.root },
         React.createElement("div", { style: styles.header },
-          React.createElement("h3", { style: styles.title }, "Citrus · 知乎"),
+          React.createElement("h3", { style: styles.title }, "citrus · 知乎"),
           React.createElement("p", { style: styles.description },
             "配置知乎登录态与返回条数。保存后立即生效，无需重启。Cookie 保存后不会回显。")
         ),
