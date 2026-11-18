@@ -16,17 +16,22 @@
  */
 
 import z from '@deepseek-ai/schemastery';
+import { PLATFORM_DEFAULTS } from './platforms/registry.js';
+
+/** 默认值只在 registry 里写一份，schema 和工具层都从它取。 */
+const zhihu = PLATFORM_DEFAULTS.zhihu;
 
 /**
  * 各家平台共有的连接与节流设置。
  * 每个平台一份：不同站点的限流策略不该互相牵连。
+ * @param {object} defaults 该平台的默认值
  */
-const transportFields = {
-  gapMs: z.natural().default(350).max(10000).description('请求最小间隔（毫秒）。别长期设 0，那是给自己找风控'),
-  jitterMs: z.natural().default(250).max(10000).description('请求随机抖动（毫秒）'),
-  timeoutMs: z.natural().default(20000).min(1000).max(120000).description('单次上游请求超时（毫秒）'),
-  maxRetries: z.natural().default(2).max(5).description('429/5xx/网络错误的重试次数')
-};
+const transportFields = (defaults) => ({
+  gapMs: z.natural().default(defaults.gapMs).max(10000).description('请求最小间隔（毫秒）。别长期设 0，那是给自己找风控'),
+  jitterMs: z.natural().default(defaults.jitterMs).max(10000).description('请求随机抖动（毫秒）'),
+  timeoutMs: z.natural().default(defaults.timeoutMs).min(1000).max(120000).description('单次上游请求超时（毫秒）'),
+  maxRetries: z.natural().default(defaults.maxRetries).max(5).description('429/5xx/网络错误的重试次数')
+});
 
 /** 知乎：登录态 + 各工具默认条数。 */
 export const ZhihuConfig = z.object({
@@ -36,15 +41,15 @@ export const ZhihuConfig = z.object({
   cookieFile: z.string().default('').description(
     'Cookie 文件路径，留空使用 <DSH_HOME>/dsh-citrus/zhihu.cookie（推荐用 dsh-citrus auth 写入）。'
   ),
-  hotLimit: z.natural().default(10).min(1).max(30).description('热榜默认条数（知乎热榜最多 30 条，不给翻页）'),
-  searchLimit: z.natural().default(8).min(1).max(20).description('搜索默认条数'),
-  commentLimit: z.natural().default(20).min(1).max(100).description('评论默认条数'),
-  contentChars: z.natural().default(1500).min(200).max(16000).description('单条正文字数上限'),
-  commentChars: z.natural().default(200).min(40).max(800).description('单条评论字数上限'),
-  excerptChars: z.natural().default(120).min(20).max(600).description('列表摘要字数上限'),
-  relatedAnswers: z.natural().default(3).min(0).max(5).description('读问题时附带几条高赞回答'),
-  promptHint: z.boolean().default(true).description('消息提到知乎时，在系统提示词里提醒模型调用工具'),
-  ...transportFields
+  hotLimit: z.natural().default(zhihu.hotLimit).min(1).max(30).description('热榜默认条数（知乎热榜最多 30 条，不给翻页）'),
+  searchLimit: z.natural().default(zhihu.searchLimit).min(1).max(20).description('搜索默认条数'),
+  commentLimit: z.natural().default(zhihu.commentLimit).min(1).max(100).description('评论默认条数'),
+  contentChars: z.natural().default(zhihu.contentChars).min(200).max(16000).description('单条正文字数上限'),
+  commentChars: z.natural().default(zhihu.commentChars).min(40).max(800).description('单条评论字数上限'),
+  excerptChars: z.natural().default(zhihu.excerptChars).min(20).max(600).description('列表摘要字数上限'),
+  relatedAnswers: z.natural().default(zhihu.relatedAnswers).min(0).max(5).description('读问题时附带几条高赞回答'),
+  promptHint: z.boolean().default(zhihu.promptHint).description('消息提到知乎时，在系统提示词里提醒模型调用工具'),
+  ...transportFields(zhihu)
 });
 
 export const Config = z.object({

@@ -10,6 +10,29 @@
 export const PLATFORM_IDS = ['zhihu'];
 
 /**
+ * 各平台的默认值。
+ *
+ * schema 的默认值（lib/config.js）和工具层的兜底（lib/tools.js）都从这里取：
+ * 同一个数字只写一遍，免得改了一处忘了另一处。
+ */
+export const PLATFORM_DEFAULTS = {
+  zhihu: {
+    hotLimit: 10,
+    searchLimit: 8,
+    commentLimit: 20,
+    contentChars: 1500,
+    commentChars: 200,
+    excerptChars: 120,
+    relatedAnswers: 3,
+    gapMs: 350,
+    jitterMs: 250,
+    timeoutMs: 20000,
+    maxRetries: 2,
+    promptHint: true
+  }
+};
+
+/**
  * 解开插件收到的 config。
  *
  * `Config.meta.volatile = true` 时，Cordis 为了「改配置不重挂插件」，交给 apply 的不是

@@ -11,7 +11,7 @@
  */
 
 import { friendlyMessage } from './core/errors.js';
-import { platformConfig } from './platforms/registry.js';
+import { PLATFORM_DEFAULTS, platformConfig } from './platforms/registry.js';
 import {
   renderComments, renderHot, renderItem, renderSearch, summarizeItem
 } from './render.js';
@@ -20,15 +20,8 @@ const INT = (description) => ({ type: 'integer', description });
 const STR = (description) => ({ type: 'string', description });
 const BOOL = (description) => ({ type: 'boolean', description });
 
-const DEFAULTS = {
-  hotLimit: 10,
-  searchLimit: 8,
-  commentLimit: 20,
-  contentChars: 1500,
-  commentChars: 200,
-  excerptChars: 120,
-  relatedAnswers: 3
-};
+/** 条数/字数的兜底值；和 schema 默认值是同一份（registry.js）。 */
+const DEFAULTS = PLATFORM_DEFAULTS.zhihu;
 
 function toolFailure(error) {
   return new Error(friendlyMessage(error));
@@ -257,67 +250,7 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
     timeoutMs: 15000,
     isConcurrencySafe: () => true,
     async execute() {
-      const current = platform();
-      const report = {
-        host: {
-          settingsService: false,
-          namespaces: [],
-          namespaceRegistered: false,
-          values: {
-            hotLimit: current.hotLimit,
-            searchLimit: current.searchLimit,
-            commentLimit: current.commentLimit,
-            cookieConfigured: Boolean(String(current.cookie || '').trim()) || Boolean(String(current.cookieFile || '').trim())
-          }
-        },
-        clientModules: { available: false },
-        loader: { entries: [] }
-      };
-
-      try {
-        const settings = ctx.get('settings');
-        if (settings) {
-          report.host.settingsService = true;
-          const described = settings.describe({ redactSecrets: true });
-          report.host.namespaces = described.map((row) => row.ns);
-          report.host.namespaceRegistered = report.host.namespaces.includes('dsh-citrus');
-        }
-      } catch (error) {
-        report.host.error = String(error && error.message ? error.message : error);
-      }
-
-      try {
-        const modules = ctx.get('clientModules');
-        if (modules) {
-          const graph = modules.graph();
-          const ids = graph.entries.map((row) => row.id);
-          report.clientModules = {
-            available: true,
-            hasCitrus: ids.includes('dsh-citrus'),
-            entries: ids.filter((id) => id === 'dsh-citrus' || id.includes('settings')),
-            clientPath: modules.clientPath('dsh-citrus') ?? null
-          };
-        }
-      } catch (error) {
-        report.clientModules.error = String(error && error.message ? error.message : error);
-      }
-
-      try {
-        const loader = ctx.get('loader');
-        if (loader) {
-          report.loader.entries = loader.entries()
-            .filter((entry) => String(entry.options.name || '').includes('dsh-citrus'))
-            .map((entry) => ({
-              // 这几个字段在 Loader 那边都可能是空的；原样透出 undefined 会让整个工具输出被判非法。
-              name: entry.options.name ?? null,
-              disabled: Boolean(entry.disabled),
-              fiber: entry.fiber === undefined ? null : entry.fiber.state ?? null
-            }));
-        }
-      } catch (error) {
-        report.loader.error = String(error && error.message ? error.message : error);
-      }
-
+      const report = collectDiagnostics(ctx, platform());
       return { ...report, markdown: JSON.stringify(report, null, 2) };
     }
   }));

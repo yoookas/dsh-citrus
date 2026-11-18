@@ -13,7 +13,7 @@
  * 宿主这一侧只要导出 Config，不用注册任何 settings 命名空间。
  */
 
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { Config } from './config.js';
 import { resolveConfig } from './platforms/registry.js';
@@ -43,34 +43,10 @@ export function apply(ctx, config) {
     }
   };
 
-  const diag = (event, data = {}) => {
-    try {
-      appendFileSync(
-        dataDir() + '/diag.log',
-        JSON.stringify({ at: new Date().toISOString(), event, ...data }) + '\n',
-        'utf8'
-      );
-    } catch {
-      /* 诊断日志失败不影响插件 */
-    }
-  };
-
   try {
     mkdirSync(dataDir(), { recursive: true });
   } catch {
     /* 建不了目录不影响工具，真正写 Cookie 时会再报错 */
-  }
-
-  try {
-    const settingsNow = ctx.get('settings');
-    diag('apply', {
-      settingsNow: Boolean(settingsNow),
-      hasInstallSection: Boolean(settingsNow && typeof settingsNow.installSection === 'function'),
-      hasRegister: Boolean(settingsNow && typeof settingsNow.register === 'function'),
-      clientModules: Boolean(ctx.get('clientModules'))
-    });
-  } catch (error) {
-    diag('apply-error', { message: String(error) });
   }
 
   // 配置由 Loader 传入。标了 volatile 的 Config 拿到的是 Volatile 引用，
