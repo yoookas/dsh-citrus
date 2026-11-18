@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { MockUpstream } from './mock-upstream.mjs';
-import { writeCookieFile } from '../lib/store.js';
+import { defaultCookieFile, writeCookieFile } from '../lib/store.js';
 import { platformConfig, resolveConfig } from '../lib/platforms/registry.js';
 import { CitrusRuntime } from '../lib/runtime.js';
 import { registerTools } from '../lib/tools.js';
@@ -23,7 +23,6 @@ function defaultConfig(overrides = {}) {
     platforms: {
       zhihu: {
         cookie: '',
-        cookieFile: '',
         hotLimit: 10,
         searchLimit: 8,
         commentLimit: 20,
@@ -107,10 +106,13 @@ async function boot(config) {
   await upstream.start();
   process.env.CITRUS_ZHIHU_BASE_URL = upstream.url;
   const dir = mkdtempSync(join(tmpdir(), 'dsh-citrus-tools-'));
-  const cookieFile = join(dir, 'zhihu.cookie');
+  // Cookie 现在固定从 <DSH_HOME>/dsh-citrus/<platform>.cookie 读，所以这里把 DSH_HOME 指到临时目录。
+  const previousHome = process.env.DSH_HOME;
+  process.env.DSH_HOME = dir;
+  const cookieFile = defaultCookieFile('zhihu');
   writeCookieFile(cookieFile, "curl 'https://www.zhihu.com/' -H 'cookie: z_c0=demo-token; d_c0=demo'");
   const ctx = fakeContext();
-  const resolved = defaultConfig({ cookieFile, ...config });
+  const resolved = defaultConfig(config);
   let live = resolved;
   const getConfig = () => live;
   const runtime = new CitrusRuntime(getConfig, () => {});
@@ -127,6 +129,8 @@ async function boot(config) {
     },
     async stop() {
       delete process.env.CITRUS_ZHIHU_BASE_URL;
+      if (previousHome === undefined) delete process.env.DSH_HOME;
+      else process.env.DSH_HOME = previousHome;
       runtime.dispose();
       ctx._effects.forEach((dispose) => {
         try {
@@ -177,7 +181,7 @@ test('设置热更新：条数上限下一次调用立即生效', async () => {
     const first = await tool.execute({}, exec);
     assert.equal(first.count, 2);
 
-    app.setConfig(defaultConfig({ cookieFile: app.configFile, hotLimit: 1 }));
+    app.setConfig(defaultConfig({ hotLimit: 1 }));
     const second = await tool.execute({}, exec);
     assert.equal(second.count, 1);
   } finally {
@@ -224,8 +228,10 @@ test('zhihu_comments：评论列表', async () => {
 });
 
 test('没配 Cookie 时给出可行动的错误', async () => {
-  const app = await boot({ cookieFile: join(tmpdir(), 'no-such-cookie-file.txt') });
+  const app = await boot({});
   try {
+    // 把 boot 写好的那份删掉，模拟「什么都没配」。
+    rmSync(app.configFile, { force: true });
     await assert.rejects(
       app.ctx._tools.get('zhihu_hot').execute({ limit: 1 }, exec),
       /dsh-citrus auth/

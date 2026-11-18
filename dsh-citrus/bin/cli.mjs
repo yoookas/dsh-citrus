@@ -12,6 +12,7 @@
 
 import { readFileSync } from 'node:fs';
 import { defaultCookieFile, readCookieFile, removeCookieFile, resolveCookie, writeCookieFile } from '../lib/store.js';
+import { PLATFORM_DEFAULTS } from '../lib/platforms/registry.js';
 import { ZhihuAdapter } from '../lib/platforms/zhihu/adapter.js';
 import { friendlyMessage } from '../lib/core/errors.js';
 import { renderHot } from '../lib/render.js';
@@ -37,13 +38,14 @@ async function readStdin() {
 }
 
 function makeConfig(cookie) {
+  const defaults = PLATFORM_DEFAULTS.zhihu;
   return {
     cookie,
     baseUrl: process.env.CITRUS_ZHIHU_BASE_URL || undefined,
-    gapMs: 350,
-    jitterMs: 250,
-    timeoutMs: 20000,
-    maxRetries: 2
+    gapMs: defaults.gapMs,
+    jitterMs: defaults.jitterMs,
+    timeoutMs: defaults.timeoutMs,
+    maxRetries: defaults.maxRetries
   };
 }
 
@@ -56,17 +58,17 @@ const HELP = [
   'dsh-citrus —— 知乎内容插件（DeepSeek Harness）',
   '',
   '用法：',
-  '  dsh-citrus auth [--file <路径>] [--cookie-file <路径>]',
+  '  dsh-citrus auth [--file <路径>]',
   '      从 stdin 或文件读入浏览器复制的内容（cURL / Cookie 头 / 裸串 / JSON），',
   '      解析后写入 ' + defaultCookieFile(),
   '',
-  '  dsh-citrus status [--cookie-file <路径>]',
+  '  dsh-citrus status',
   '      显示 Cookie 指纹与上游连通性（发一次 /me 请求）',
   '',
-  '  dsh-citrus hot [--limit 5] [--cookie-file <路径>]',
+  '  dsh-citrus hot [--limit 5]',
   '      直接打印知乎热榜（调试用）',
   '',
-  '  dsh-citrus logout [--cookie-file <路径>]',
+  '  dsh-citrus logout',
   '      删除默认 Cookie 文件',
   '',
   '示例：',
@@ -81,8 +83,7 @@ const HELP = [
 ].join('\n');
 
 async function cmdAuth() {
-  const specific = option('--cookie-file');
-  const target = specific || defaultCookieFile();
+  const target = defaultCookieFile();
   let raw = '';
   const file = option('--file');
   if (file) {
@@ -98,7 +99,7 @@ async function cmdAuth() {
     return;
   }
   try {
-    const resolved = resolveCookie({ cookie: raw, cookieFile: target }, 'zhihu');
+    const resolved = resolveCookie({ cookie: raw }, 'zhihu');
     writeCookieFile(target, resolved.cookie);
     console.log('已保存知乎 Cookie');
     console.log('  文件：' + target);
@@ -113,9 +114,9 @@ async function cmdAuth() {
   }
 }
 
-async function withAdapter(cookieFile, fn) {
+async function withAdapter(fn) {
   try {
-    const resolved = resolveCookie({ cookieFile: cookieFile || undefined }, 'zhihu');
+    const resolved = resolveCookie({}, 'zhihu');
     const adapter = new ZhihuAdapter({ ...makeConfig(resolved.cookie), baseUrl: process.env.CITRUS_ZHIHU_BASE_URL || undefined });
     return await fn(adapter, resolved);
   } catch (error) {
@@ -125,8 +126,7 @@ async function withAdapter(cookieFile, fn) {
 }
 
 async function cmdStatus() {
-  const cookieFile = option('--cookie-file');
-  await withAdapter(cookieFile, async (adapter, resolved) => {
+  await withAdapter(async (adapter, resolved) => {
     console.log('知乎 Cookie');
     console.log('  文件：' + (resolved.sourcePath || resolved.source));
     console.log('  指纹：' + resolved.fingerprint);
@@ -142,15 +142,14 @@ async function cmdStatus() {
 
 async function cmdHot() {
   const limit = Number.parseInt(option('--limit', '5'), 10) || 5;
-  const cookieFile = option('--cookie-file');
-  await withAdapter(cookieFile, async (adapter) => {
+  await withAdapter(async (adapter) => {
     const page = await adapter.hot(limit);
     console.log(renderHot(page, { maxItems: limit, excerptChars: 120 }));
   });
 }
 
 async function cmdLogout() {
-  const target = option('--cookie-file') || defaultCookieFile();
+  const target = defaultCookieFile();
   removeCookieFile(target);
   console.log('已删除 ' + target);
 }

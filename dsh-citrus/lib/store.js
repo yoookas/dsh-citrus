@@ -3,8 +3,7 @@
  *
  * 优先级：
  *   1. 插件配置里的 cookie（直接粘贴 cURL）；
- *   2. 配置里的 cookieFile；
- *   3. 默认文件 <DSH_HOME>/dsh-citrus/zhihu.cookie（由 dsh-citrus auth 写入）。
+ *   2. 默认文件 <DSH_HOME>/dsh-citrus/<platform>.cookie（由 dsh-citrus auth 写入）。
  *
  * 文件按 mtime 缓存：dsh-citrus auth 换号后，下一次工具调用就会用新的，
  * 不需要重启 DeepSeek Harness。
@@ -73,18 +72,21 @@ export function removeCookieFile(path) {
 
 /**
  * 解析出当前生效的 Cookie。
- * @param {{ cookie?: string, cookieFile?: string }} config
+ *
+ * 两个来源：配置里的 cookie 优先，否则读 <DSH_HOME>/dsh-citrus/<platform>.cookie
+ * （dsh-citrus auth 写的那份）。配置里不再暴露文件路径，路径是固定的。
+ * @param {{ cookie?: string }} config
  * @param {string} [platform]
  */
 export function resolveCookie(config = {}, platform = 'zhihu') {
   const direct = String(config.cookie || '').trim();
-  const path = String(config.cookieFile || '').trim() || defaultCookieFile(platform);
+  const path = defaultCookieFile(platform);
   const raw = direct || readCookieFile(path);
   if (!raw) {
     throw new CitrusError(
       'no_credential',
       '还没有配置知乎 Cookie。',
-      '运行 dsh-citrus auth 粘贴浏览器复制的 cURL（或把 cookie 写进插件配置）。',
+      '在面板里粘贴 cURL，或运行 dsh-citrus auth 写入本地文件。',
       { platform }
     );
   }

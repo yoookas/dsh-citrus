@@ -64,7 +64,7 @@ node scripts/install.mjs --uninstall     # 卸载
 卡片内容：
 
 - **平台 tab**：一个平台一个页签（现在只有「知乎」）；加平台不用改页面结构，`PLATFORMS` 里加一项就多一个 tab。
-- **全部配置字段**：schema 里 14 个字段面板都能改——Cookie（密码框，留空=不修改）、Cookie 文件路径、
+- **全部配置字段**：schema 里 13 个字段面板都能改——Cookie（密码框，留空=不修改）、
   6 个条数/字数、附带高赞回答数、提示词开关、请求间隔/抖动/超时/重试次数。
 - **保存设置**：写进**当前 profile 的 Cordis patch**（也就是这个 bundle 那一行的 `config`），**下一次工具调用立即生效**，不用重启。
 - **恢复默认**：清掉这些用户覆盖，回退到组合配置里的值（包括 schema 默认值）。
@@ -72,7 +72,7 @@ node scripts/install.mjs --uninstall     # 卸载
 
 > 设置不是写进 `<DSH_HOME>/settings.yaml`：DSH 0.2 起，表单改动通过 config-editor 落盘到
 > profile 的 Cordis patch。`settings.yaml` 只在旧版本迁移时被读一次。
-> 面板里的 Cookie 也会跟着进这份 patch；不想让它落盘就用 `dsh-citrus auth` 或 `cookieFile`。
+> 面板里的 Cookie 也会跟着进这份 patch；不想让它落盘就用 `dsh-citrus auth` 写本地文件。
 >
 > 装完/更新插件后如果入口没出现，刷新一次 GUI 页面（Ctrl+R）——浏览器端模块图是页面加载时注入的。
 
@@ -107,11 +107,10 @@ node <DSH_HOME>/plugins/dsh-citrus/bin/cli.mjs status
         platforms:
           zhihu:
             cookie: '把 cURL 粘在这里'
-            # 或
-            # cookieFile: 'C:/Users/you/.dsh/dsh-citrus/zhihu.cookie'
 ```
 
-Cookie 文件默认在 `<DSH_HOME>/dsh-citrus/zhihu.cookie`，换号后下一次工具调用立即生效，不用重启。
+也可以留空 `cookie`，改由 `dsh-citrus auth` 写 `<DSH_HOME>/dsh-citrus/zhihu.cookie`；
+换号后下一次工具调用立即生效，不用重启。
 
 ---
 
@@ -121,8 +120,7 @@ Cookie 文件默认在 `<DSH_HOME>/dsh-citrus/zhihu.cookie`，换号后下一次
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
-| `platforms.zhihu.cookie` | 空 | 直接粘贴 cURL（secret 角色，配置界面会遮罩） |
-| `platforms.zhihu.cookieFile` | 空 | Cookie 文件路径；空 = `<DSH_HOME>/dsh-citrus/zhihu.cookie` |
+| `platforms.zhihu.cookie` | 空 | 直接粘贴 cURL（secret 角色，配置界面会遮罩）；留空则读 `<DSH_HOME>/dsh-citrus/zhihu.cookie` |
 | `platforms.zhihu.hotLimit` | 10 | 热榜默认条数（1-30） |
 | `platforms.zhihu.searchLimit` | 8 | 搜索默认条数（1-20） |
 | `platforms.zhihu.commentLimit` | 20 | 评论默认条数（1-100） |

@@ -47,14 +47,7 @@ window.__ModuleLoader__.load({
             key: "cookie",
             label: "知乎 Cookie",
             placeholder: "粘贴新的 cURL / Cookie（留空表示不修改）",
-            hint: "浏览器里 F12 -> Network -> 右键任意知乎请求 -> Copy as cURL，把整段粘进来。面板保存过的 Cookie 优先于本地 Cookie 文件；清除后回退到文件。"
-          },
-          {
-            kind: "text",
-            key: "cookieFile",
-            label: "Cookie 文件",
-            placeholder: "留空 = <DSH_HOME>/dsh-citrus/zhihu.cookie",
-            hint: "把 Cookie 放文件里就填路径；推荐用 dsh-citrus auth 写入，面板里的 Cookie 优先级更高。"
+            hint: "浏览器里 F12 -> Network -> 右键任意知乎请求 -> Copy as cURL，把整段粘进来。面板保存的 Cookie 优先于 dsh-citrus auth 写进本地文件的那份；清除后回退到文件。"
           },
           { kind: "number", key: "hotLimit", label: "热榜条数", hint: "1-30；知乎热榜不给翻页，30 就是上限。", min: 1, max: 30 },
           { kind: "number", key: "searchLimit", label: "搜索条数", hint: "1-20。", min: 1, max: 20 },
@@ -420,7 +413,8 @@ window.__ModuleLoader__.load({
         disposers.push(ctx.slots.inject("settings.section", () => ctx.slots.register({
           name: "settings.section",
           id: SECTION_ID,
-          order: 18,
+          // 排在各内置分区之后：General 0 / Models 10 / 插件 15 / Agent 预设 20。
+          order: 25,
           label: () => TITLE
         }, Page)));
         // keyed slot：key 必须是 <包名>#<行 id>，行 id 跟 bundle patch 里的 id 一致。

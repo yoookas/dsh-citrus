@@ -16,7 +16,7 @@ import { htmlToText } from '../lib/core/html.js';
 import { CitrusError, friendlyMessage } from '../lib/core/errors.js';
 import { ZhihuAdapter } from '../lib/platforms/zhihu/adapter.js';
 import { renderComments, renderHot, renderItem, renderSearch } from '../lib/render.js';
-import { resolveCookie, writeCookieFile } from '../lib/store.js';
+import { defaultCookieFile, resolveCookie, writeCookieFile } from '../lib/store.js';
 
 const CURL = "curl 'https://www.zhihu.com/api/v4/me' -H 'cookie: z_c0=demo-token; d_c0=demo' -H 'user-agent: TestAgent/1.0'";
 
@@ -236,27 +236,40 @@ test('渲染：热榜/搜索/正文/评论都带链接且不含 cookie', async (
 
 // ---- Cookie 文件 -----------------------------------------------------
 
-test('Cookie 文件：写入后能被解析，换文件后立即生效', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'dsh-citrus-test-'));
+test('Cookie 文件：默认路径写入后能被解析，改文件后立即生效', () => {
+  const home = mkdtempSync(join(tmpdir(), 'dsh-citrus-home-'));
+  const previous = process.env.DSH_HOME;
+  process.env.DSH_HOME = home;
   try {
-    const path = join(dir, 'zhihu.cookie');
+    const path = defaultCookieFile('zhihu');
     writeCookieFile(path, CURL);
-    const resolved = resolveCookie({ cookieFile: path });
+    const resolved = resolveCookie({});
     assert.equal(resolved.hasLogin, true);
     assert.equal(resolved.cookie, 'z_c0=demo-token; d_c0=demo');
     assert.ok(!resolved.fingerprint.includes('demo-token'));
 
     writeFileSync(path, 'z_c0=second; d_c0=x', 'utf8');
-    const again = resolveCookie({ cookieFile: path });
+    const again = resolveCookie({});
     assert.equal(again.cookie, 'z_c0=second; d_c0=x');
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    if (previous === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previous;
+    rmSync(home, { recursive: true, force: true });
   }
 });
 
 test('Cookie 文件：缺失时给出 no_credential', () => {
-  assert.throws(
-    () => resolveCookie({ cookieFile: join(tmpdir(), 'definitely-missing-cookie-file.txt') }),
-    (error) => error instanceof CitrusError && error.code === 'no_credential'
-  );
+  const home = mkdtempSync(join(tmpdir(), 'dsh-citrus-home-'));
+  const previous = process.env.DSH_HOME;
+  process.env.DSH_HOME = home;
+  try {
+    assert.throws(
+      () => resolveCookie({}),
+      (error) => error instanceof CitrusError && error.code === 'no_credential'
+    );
+  } finally {
+    if (previous === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previous;
+    rmSync(home, { recursive: true, force: true });
+  }
 });

@@ -13,7 +13,7 @@
 import { writeFileSync } from 'node:fs';
 import { friendlyMessage } from './core/errors.js';
 import { PLATFORM_DEFAULTS, platformConfig } from './platforms/registry.js';
-import { dataDir } from './store.js';
+import { dataDir, defaultCookieFile, readCookieFile } from './store.js';
 import {
   renderComments, renderHot, renderItem, renderSearch, summarizeItem
 } from './render.js';
@@ -58,7 +58,8 @@ function collectDiagnostics(ctx, current) {
         hotLimit: current.hotLimit ?? null,
         searchLimit: current.searchLimit ?? null,
         commentLimit: current.commentLimit ?? null,
-        cookieConfigured: Boolean(String(current.cookie || '').trim()) || Boolean(String(current.cookieFile || '').trim())
+        // 面板里存的优先，否则看 auth 写进本地文件的那份。
+        cookieConfigured: Boolean(String(current.cookie || '').trim()) || Boolean(readCookieFile(defaultCookieFile('zhihu')))
       }
     },
     clientModules: { available: false }

@@ -212,7 +212,7 @@ test('平台以 tab 呈现：一个平台一个页签', async () => {
   assert.equal(tabs[0].props['aria-selected'], true, '默认选中第一个平台');
 });
 
-test('面板覆盖全部配置字段（数字 / 文本 / 密码 / 开关）', async () => {
+test('面板覆盖全部配置字段（数字 / 密码 / 开关）', async () => {
   const { Page, react } = await mount({
     subscribe: () => () => {},
     getSnapshot: () => ({ status: 'ready', writable: true, revision: 1, value: { platforms: { zhihu: {} } } })
@@ -222,15 +222,14 @@ test('面板覆盖全部配置字段（数字 / 文本 / 密码 / 开关）', as
   const inputs = findAll(tree, (element) => element.type === 'input');
   const countOf = (type) => inputs.filter((element) => element.props.type === type).length;
 
-  // schema 里一共 14 个字段，面板不该漏掉任何一个（以前漏了 7 个，只能去改 yaml）。
-  assert.equal(inputs.length, 14);
+  // schema 里一共 13 个字段（cookie 不给自定义路径），面板不该漏掉任何一个。
+  assert.equal(inputs.length, 13);
   assert.equal(countOf('number'), 11);
-  assert.equal(countOf('text'), 1);
   assert.equal(countOf('password'), 1);
   assert.equal(countOf('checkbox'), 1);
 });
 
-test('文本留空写 unset，开关写布尔值', async () => {
+test('密码框留空表示不修改，开关写布尔值', async () => {
   const calls = [];
   const form = {
     subscribe: () => () => {},
@@ -238,7 +237,7 @@ test('文本留空写 unset，开关写布尔值', async () => {
       status: 'ready',
       writable: true,
       revision: 2,
-      value: { platforms: { zhihu: { cookieFile: 'C:/x.cookie', promptHint: true } } }
+      value: { platforms: { zhihu: { promptHint: true } } }
     }),
     mutate: async (ops, revision) => {
       calls.push({ ops, revision });
@@ -249,8 +248,9 @@ test('文本留空写 unset，开关写布尔值', async () => {
   const { Page, react } = await mount(form);
 
   let tree = render(react, Page, {});
-  findAll(tree, (element) => element.props?.type === 'text')[0]
-    .props.onChange({ target: { value: '' } });
+  // 密码框改成空：读不回原值，所以只能表示「不动它」，不能当成清空。
+  findAll(tree, (element) => element.props?.type === 'password')[0]
+    .props.onChange({ target: { value: '   ' } });
   findAll(tree, (element) => element.props?.type === 'checkbox')[0]
     .props.onChange({ target: { checked: false } });
 
@@ -259,10 +259,7 @@ test('文本留空写 unset，开关写布尔值', async () => {
   await saveButton[0].props.onClick();
 
   assert.deepEqual(calls, [{
-    ops: [
-      { op: 'unset', path: ['platforms', 'zhihu', 'cookieFile'] },
-      { op: 'set', path: ['platforms', 'zhihu', 'promptHint'], value: false }
-    ],
+    ops: [{ op: 'set', path: ['platforms', 'zhihu', 'promptHint'], value: false }],
     revision: 2
   }]);
 });

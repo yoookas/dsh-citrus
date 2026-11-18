@@ -36,10 +36,7 @@ const transportFields = (defaults) => ({
 /** 知乎：登录态 + 各工具默认条数。 */
 export const ZhihuConfig = z.object({
   cookie: z.string().role('secret').default('').description(
-    '知乎 Cookie：粘贴浏览器里的 Copy as cURL（也认 Cookie 头 / 裸 Cookie 串 / JSON）。留空则读 cookieFile。'
-  ),
-  cookieFile: z.string().default('').description(
-    'Cookie 文件路径，留空使用 <DSH_HOME>/dsh-citrus/zhihu.cookie（推荐用 dsh-citrus auth 写入）。'
+    '知乎 Cookie：粘贴浏览器里的 Copy as cURL（也认 Cookie 头 / 裸 Cookie 串 / JSON）。留空则读 <DSH_HOME>/dsh-citrus/zhihu.cookie（dsh-citrus auth 写入的那份）。'
   ),
   hotLimit: z.natural().default(zhihu.hotLimit).min(1).max(30).description('热榜默认条数（知乎热榜最多 30 条，不给翻页）'),
   searchLimit: z.natural().default(zhihu.searchLimit).min(1).max(20).description('搜索默认条数'),
