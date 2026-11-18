@@ -64,6 +64,17 @@ jobs:
             VERSION="${PREFIX}.${TT}"
             echo "自动编号：$PREFIX 第 $TT 次"
           fi
+          # 新仓库可能没有历史 tag：以 package.json 里的同月版本号为下限，避免版本回退
+          CURRENT="$(node -p "require('./dsh-citrus/package.json').version")"
+          CURRENT_PREFIX="${CURRENT%.*}"
+          if [ "$CURRENT_PREFIX" = "$PREFIX" ]; then
+            CURRENT_TT=$((10#${CURRENT##*.}))
+            VERSION_TT=$((10#${VERSION##*.}))
+            if [ "$CURRENT_TT" -gt "$VERSION_TT" ]; then
+              VERSION="$CURRENT"
+              echo "package.json 已在本月更靠前：$VERSION"
+            fi
+          fi
           printf "version=%s\n" "$VERSION" >> "$GITHUB_OUTPUT"
           printf "tag=v%s\n" "$VERSION" >> "$GITHUB_OUTPUT"
           echo "本次发布：v$VERSION"
