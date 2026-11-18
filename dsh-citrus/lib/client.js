@@ -2,7 +2,8 @@
  * dsh-citrus 的浏览器半侧：在「设置 -> 插件 -> 插件配置」里渲染一张卡片。
  *
  * 只依赖 shell 播种的 react（通过 require("react")），不引入其它包。
- * 数据面走 ctx.settingsScope：读写的是 Host 注册的 settings 命名空间 dsh-citrus。
+ * 卡片本身只注册到 slots（启动时一定存在）；settingsScope 用 ctx.inject 延迟绑定，
+ * 避免插件在设置服务还没注册时被标记成「等待激活」。
  */
 window.__ModuleLoader__.load({
   id: "dsh-citrus",
@@ -88,14 +89,6 @@ window.__ModuleLoader__.load({
       }
     };
 
-    /** 由 apply() 绑定；卡片组件只读它。 */
-    let boundScope = null;
-
-    const subscribeScope = (listener) => (boundScope === null ? () => {} : boundScope.subscribe(listener));
-    const readScope = () => (boundScope === null
-      ? { status: "unavailable", value: undefined, base: undefined, user: undefined, revision: undefined, writable: false, mode: "host" }
-      : boundScope.getSnapshot());
-
     function valueOf(snapshot, key) {
       const value = snapshot && snapshot.value ? snapshot.value[key] : undefined;
       return value === undefined || value === null ? "" : String(value);
@@ -117,8 +110,11 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function CitrusCard() {
-      const snapshot = React.useSyncExternalStore(subscribeScope, readScope, readScope);
+    function CitrusCardView(props) {
+      const scope = props.scope;
+      const subscribe = React.useCallback((listener) => scope.subscribe(listener), [scope]);
+      const read = React.useCallback(() => scope.getSnapshot(), [scope]);
+      const snapshot = React.useSyncExternalStore(subscribe, read, read);
       const [draft, setDraft] = React.useState({});
       const [saving, setSaving] = React.useState(false);
       const [message, setMessage] = React.useState(null);
@@ -167,19 +163,19 @@ window.__ModuleLoader__.load({
           setMessage({ kind: "error", text: "没有改动需要保存。" });
           return;
         }
-        run(() => boundScope.mutate(ops, snapshot.revision), "已保存，下一次工具调用立即生效。");
+        run(() => scope.mutate(ops, snapshot.revision), "已保存，下一次工具调用立即生效。");
       };
 
       const clearCookie = () => {
         if (!writable) return;
-        run(() => boundScope.unset("cookie"), "已清除保存的 Cookie；会回退到 Cookie 文件或组合配置。");
+        run(() => scope.unset("cookie"), "已清除保存的 Cookie；会回退到 Cookie 文件或组合配置。");
       };
 
       const resetAll = () => {
         if (!writable) return;
         const ops = NUMERIC_FIELDS.map((field) => ({ op: "unset", path: [field.key] }));
         ops.push({ op: "unset", path: ["cookie"] });
-        run(() => boundScope.mutate(ops, snapshot.revision), "已恢复默认（不会删除本地 Cookie 文件）。");
+        run(() => scope.mutate(ops, snapshot.revision), "已恢复默认（不会删除本地 Cookie 文件）。");
       };
 
       if (!snapshot || snapshot.status === "unavailable") {
@@ -249,17 +245,24 @@ window.__ModuleLoader__.load({
       );
     }
 
-    /** 浏览器半侧依赖的服务。 */
-    const inject = ["slots", "settingsScope"];
+    /** 浏览器半侧只硬依赖 slots；settingsScope 在设置页打开时一定已经就绪。 */
+    const inject = ["slots"];
 
-    /** 绑定命名空间并把卡片注册进「可配置插件」标签页。 */
+    /**
+     * 绑定命名空间并把卡片注册进「可配置插件」标签页。
+     * settingsScope 用 ctx.inject 延迟绑定：父 fiber 启动即激活，不会出现在
+     * client-modules 的「waiting for activation」列表里。
+     */
     function apply(ctx) {
-      boundScope = ctx.settingsScope.bind({ namespace: NAMESPACE });
-      ctx.slots.inject("settings.plugin.item", function* () {
-        yield ctx.slots.register({
-          name: "settings.plugin.item",
-          key: NAMESPACE
-        }, CitrusCard);
+      ctx.inject(["settingsScope"], (scopeCtx) => {
+        const scope = scopeCtx.settingsScope.bind({ namespace: NAMESPACE });
+        const Card = () => React.createElement(CitrusCardView, { scope });
+        scopeCtx.slots.inject("settings.plugin.item", function* () {
+          yield scopeCtx.slots.register({
+            name: "settings.plugin.item",
+            key: NAMESPACE
+          }, Card);
+        });
       });
     }
 

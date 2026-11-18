@@ -16,6 +16,7 @@ test('package.json 声明了 web 客户端半侧', () => {
   assert.equal(pkg.exports['./client'], './lib/client.js');
   assert.equal(pkg.dsh.client.platform, 'web');
   assert.ok(Array.isArray(pkg.dsh.client.inject));
+  assert.equal(pkg.dsh.client.immediately, true);
   assert.ok(pkg.files.includes('lib'));
 });
 
