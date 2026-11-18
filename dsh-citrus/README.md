@@ -52,24 +52,28 @@ node scripts/install.mjs --uninstall     # 卸载
 
 ## 面板卡片配置
 
-安装并重载插件后，有两个入口（取决于 DSH 版本，两个都会出现）：
+安装并重载插件后有**两个入口**（同一份表单，改哪个都一样）：
 
-- **设置 → Citrus**：设置里的独立分区，最直观；
-- **侧栏「插件」面板 → 内置插件配置 → 知乎内容**：桌面端插件页的卡片。
+- **设置 → citrus**：设置里的独立分区，最直观；
+- **侧栏「插件」页 → dsh-citrus 这一行的「配置」**：行配置入口。
+
+两个入口都只在 Host 真的 serve 了 `dsh-citrus` 这个 settings 命名空间时才出现；
+没装、没启用或被别的 profile 覆盖时，界面里不会留下空壳。
 
 卡片内容：
 
-- **知乎 Cookie**：密码框，粘贴浏览器复制的 cURL / Cookie；保存后不会回显。清空输入框表示"不修改"。
-- **条数/字数**：热榜、搜索、评论条数，正文/评论/摘要字数上限。
-- **保存设置**：写入 `<DSH_HOME>/settings.yaml` 的 `dsh-citrus:` 段，**下一次工具调用立即生效**，不用重启。
-- **恢复默认**：清掉这些覆盖，回退到组合配置。
-- **清除保存的 Cookie**：删除设置里的 Cookie，回退到本地 Cookie 文件（`dsh-citrus auth` 写的那份）。
+- **平台 tab**：一个平台一个页签（现在只有「知乎」）；加平台不用改页面结构，`PLATFORMS` 里加一项就多一个 tab。
+- **Cookie**：密码框，粘贴浏览器复制的 cURL / Cookie；保存后不会回显。留空表示"不修改"。
+- **条数/字数**：热榜、搜索、评论条数，正文/评论/摘要字数上限——每个平台各自一份。
+- **保存设置**：写进**当前 profile 的 Cordis patch**（也就是这个 bundle 那一行的 `config`），**下一次工具调用立即生效**，不用重启。
+- **恢复默认**：清掉这些用户覆盖，回退到组合配置里的值（包括 schema 默认值）。
+- **清除「知乎」Cookie**：只清当前页签这个平台的 Cookie，回退到本地 Cookie 文件（`dsh-citrus auth` 写的那份）。
 
-> 设置文档默认是 `<DSH_HOME>/settings.yaml`。面板里的 Cookie 也存在这里；如果不想让它进设置文件，继续用 `dsh-citrus auth` 或插件配置里的 `cookieFile`。
+> 设置不是写进 `<DSH_HOME>/settings.yaml`：DSH 0.2 起，表单改动通过 config-editor 落盘到
+> profile 的 Cordis patch。`settings.yaml` 只在旧版本迁移时被读一次。
+> 面板里的 Cookie 也会跟着进这份 patch；不想让它落盘就用 `dsh-citrus auth` 或 `cookieFile`。
 >
-> 桌面端的「内置插件」是设置里的插件列表页，不是配置入口；配置在「设置 → Citrus」或侧栏「插件」面板里。
->
-> 装完/更新插件后如果卡片没出现，刷新一次 GUI 页面（Ctrl+R）——浏览器端的模块图是页面加载时注入的。
+> 装完/更新插件后如果入口没出现，刷新一次 GUI 页面（Ctrl+R）——浏览器端模块图是页面加载时注入的。
 
 ## 配置 Cookie
 
@@ -99,9 +103,11 @@ node <DSH_HOME>/plugins/dsh-citrus/bin/cli.mjs status
     - id: dsh-citrus
       name: 'file:///.../plugins/dsh-citrus/lib/index.js'
       config:
-        cookie: '把 cURL 粘在这里'
-        # 或
-        # cookieFile: 'C:/Users/you/.dsh/dsh-citrus/zhihu.cookie'
+        platforms:
+          zhihu:
+            cookie: '把 cURL 粘在这里'
+            # 或
+            # cookieFile: 'C:/Users/you/.dsh/dsh-citrus/zhihu.cookie'
 ```
 
 Cookie 文件默认在 `<DSH_HOME>/dsh-citrus/zhihu.cookie`，换号后下一次工具调用立即生效，不用重启。
@@ -110,22 +116,32 @@ Cookie 文件默认在 `<DSH_HOME>/dsh-citrus/zhihu.cookie`，换号后下一次
 
 ## 配置项
 
+配置按平台分组，所以路径都是 `platforms.<平台>.<字段>`。目前只有 `zhihu` 一段。
+
 | 配置 | 默认 | 说明 |
 |---|---|---|
-| `cookie` | 空 | 直接粘贴 cURL（secret 角色，配置界面会遮罩） |
-| `cookieFile` | 空 | Cookie 文件路径；空 = `<DSH_HOME>/dsh-citrus/zhihu.cookie` |
-| `hotLimit` | 10 | 热榜默认条数（1-30） |
-| `searchLimit` | 8 | 搜索默认条数（1-20） |
-| `commentLimit` | 20 | 评论默认条数（1-100） |
-| `contentChars` | 1500 | 单条正文字数上限（200-16000） |
-| `commentChars` | 200 | 单条评论字数上限（40-800） |
-| `excerptChars` | 120 | 列表摘要字数上限（20-600） |
-| `relatedAnswers` | 3 | 读问题时附带几条高赞回答（0-5） |
-| `gapMs` | 350 | 请求最小间隔；别长期设 0，那是给自己找风控 |
-| `jitterMs` | 250 | 请求随机抖动 |
-| `timeoutMs` | 20000 | 单次上游请求超时 |
-| `maxRetries` | 2 | 429/5xx/网络错误重试次数 |
-| `promptHint` | true | 是否注入系统提示词指引 |
+| `platforms.zhihu.cookie` | 空 | 直接粘贴 cURL（secret 角色，配置界面会遮罩） |
+| `platforms.zhihu.cookieFile` | 空 | Cookie 文件路径；空 = `<DSH_HOME>/dsh-citrus/zhihu.cookie` |
+| `platforms.zhihu.hotLimit` | 10 | 热榜默认条数（1-30） |
+| `platforms.zhihu.searchLimit` | 8 | 搜索默认条数（1-20） |
+| `platforms.zhihu.commentLimit` | 20 | 评论默认条数（1-100） |
+| `platforms.zhihu.contentChars` | 1500 | 单条正文字数上限（200-16000） |
+| `platforms.zhihu.commentChars` | 200 | 单条评论字数上限（40-800） |
+| `platforms.zhihu.excerptChars` | 120 | 列表摘要字数上限（20-600） |
+| `platforms.zhihu.relatedAnswers` | 3 | 读问题时附带几条高赞回答（0-5） |
+| `platforms.zhihu.gapMs` | 350 | 请求最小间隔；别长期设 0，那是给自己找风控 |
+| `platforms.zhihu.jitterMs` | 250 | 请求随机抖动 |
+| `platforms.zhihu.timeoutMs` | 20000 | 单次上游请求超时 |
+| `platforms.zhihu.maxRetries` | 2 | 429/5xx/网络错误重试次数 |
+| `platforms.zhihu.promptHint` | true | 是否注入系统提示词指引 |
+
+### 加一个平台要动哪儿
+
+1. `lib/config.js`：`platforms` 里加一段 schema；
+2. `lib/platforms/<id>/`：加适配器，并在 `lib/platforms/registry.js` 的 `PLATFORM_IDS` 里登记；
+3. `lib/client.js`：`PLATFORMS` 数组里加一项（tab、Cookie 框、条数字段都跟着出来）。
+
+宿主的工具层只认 `platformConfig(config, id)`，不用逐个改。
 
 ---
 
@@ -151,11 +167,17 @@ cd dsh-citrus
 # 宿主包解析：本地开发时把 <DSH_HOME>/profiles/node_modules 链接成 node_modules
 # Windows: mklink /J node_modules %USERPROFILE%\.dsh\profiles\node_modules
 
-npm test                       # 31 个离线用例（假知乎，不联网）
+npm test                       # 39 个离线用例（假知乎 + 假 React，不联网）
 node --check lib/index.js      # 语法检查
+node --check lib/client.js
 ```
 
-测试覆盖：Cookie 四种格式、HTML 转文本、热榜/搜索/正文/评论、错误码翻译、渲染、工具注册与执行。
+测试覆盖：Cookie 四种格式、HTML 转文本、热榜/搜索/正文/评论、错误码翻译、渲染、工具注册与执行、
+浏览器半侧的 slot 注册与写入结果处理。
+
+> **浏览器半侧的两个硬性声明**（少一个，界面上就什么都看不到，而且不会报错）：
+> `package.json` 里的 `dsh.client.platform = "web"`，以及 `exports["./client"]` 指向 `lib/client.js`。
+> `dsh-client-modules` 只扫描带这个声明的包，再按 `./client` 去取 bundle。
 
 目录：
 
@@ -163,14 +185,17 @@ node --check lib/index.js      # 语法检查
 dsh-citrus/
 ├── lib/
 │   ├── index.js                 # Cordis 插件入口（name / inject / Config / apply）
-│   ├── config.js                # schemastery 配置
+│   ├── config.js                # schemastery 配置（meta.volatile = 可热改）
+│   ├── client.js                # 浏览器半侧：settings.section + plugins.row.config
 │   ├── tools.js                 # 4 个模型工具
 │   ├── prompt.js                # 系统提示词段落
 │   ├── runtime.js               # Cookie -> 适配器
 │   ├── render.js                # 统一模型 -> 文本
 │   ├── store.js                 # Cookie 文件读写
 │   ├── core/                    # 错误、Cookie 解析、HTML、限速 HTTP、模型、缓存
-│   └── platforms/zhihu/         # 接口地址、字段归一化、适配器
+│   └── platforms/
+│       ├── registry.js          # 平台清单 + platformConfig()（不依赖宿主包）
+│       └── zhihu/               # 接口地址、字段归一化、适配器
 ├── bin/cli.mjs                  # auth / status / hot / logout
 └── tests/                       # node:test
 ```

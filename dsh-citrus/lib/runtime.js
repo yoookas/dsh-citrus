@@ -6,6 +6,7 @@
  */
 
 import { ZhihuAdapter } from './platforms/zhihu/adapter.js';
+import { platformConfig } from './platforms/registry.js';
 import { resolveCookie } from './store.js';
 
 const MAX_ADAPTERS = 4;
@@ -25,7 +26,8 @@ export class CitrusRuntime {
 
   /** 当前 Cookie 对应的知乎适配器。 */
   adapter() {
-    const config = this.getConfig() || {};
+    // 只看知乎那一段：别的平台改设置不该把知乎的适配器重建掉。
+    const config = platformConfig(this.getConfig() || {}, 'zhihu');
     if (config !== this.lastConfig) {
       // 设置变了：节流/超时/条数都可能变，旧适配器不再可靠
       this.adapters.clear();
@@ -62,7 +64,7 @@ export class CitrusRuntime {
 
   /** 当前 Cookie 的指纹与来源，用于状态展示。 */
   describeCookie() {
-    const resolved = resolveCookie(this.getConfig() || {}, 'zhihu');
+    const resolved = resolveCookie(platformConfig(this.getConfig() || {}, 'zhihu'), 'zhihu');
     return {
       configured: true,
       fingerprint: resolved.fingerprint,

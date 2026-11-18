@@ -3,16 +3,20 @@
  *
  * 配置来源：
  *   * 组合配置（cordis.patch.yml / bundle patch 里的 config）——默认值；
- *   * 桌面端 settings 会自动从本插件导出的 Config 生成表单（namespace = 条目 id
- *     dsh-citrus），保存后 Loader 会用新 config 重新应用本插件。
+ *   * settings 里的用户覆盖（namespace = 条目 id `dsh-citrus`）——保存后 Loader 用新
+ *     config 重新应用本插件，下一次工具调用就生效。
  *
- * 所以这里不需要手动注册 settings 命名空间：桌面端没有 installSection / register，
- * 它靠 Config schema 自动投影表单。
+ * 能不能在界面上改，取决于 config.js 里的 Config.meta.volatile 标记：settings 只把
+ * volatile 字段投影成表单，且只认 cwd 里唯一命中的那个 profile 条目。
+ *
+ * 表单界面在浏览器半侧（lib/client.js），它通过 ctx.configForms 读写同一个命名空间；
+ * 宿主这一侧只要导出 Config，不用注册任何 settings 命名空间。
  */
 
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { Config } from './config.js';
+import { resolveConfig } from './platforms/registry.js';
 import { registerPrompt } from './prompt.js';
 import { CitrusRuntime } from './runtime.js';
 import { dataDir } from './store.js';
@@ -69,8 +73,9 @@ export function apply(ctx, config) {
     diag('apply-error', { message: String(error) });
   }
 
-  // 配置由 Loader 传入；桌面端设置保存后会以新 config 重新应用插件。
-  const getConfig = () => config || {};
+  // 配置由 Loader 传入。标了 volatile 的 Config 拿到的是 Volatile 引用，
+  // 每次调用都 resolve 一遍：面板保存后引用内容就地更新，下一次工具调用立即读到新值。
+  const getConfig = () => resolveConfig(config);
 
   const runtime = new CitrusRuntime(getConfig, log);
   ctx.effect(() => () => runtime.dispose());

@@ -15,6 +15,15 @@ test('package.json 声明 bundle patch', () => {
   assert.ok(pkg.files.includes('lib'));
 });
 
+test('package.json 声明 web 客户端半侧，否则浏览器端永远不会被加载', () => {
+  // dsh-client-modules 只扫描 dsh.client.platform === 'web' 的包，并请求 ./client 导出。
+  assert.equal(pkg.dsh.client?.platform, 'web');
+  const client = pkg.exports['./client'];
+  assert.ok(client, '缺少 exports["./client"]');
+  assert.equal(typeof client === 'string' ? client : client.default, './lib/client.js');
+  assert.ok(pkg.files.includes('lib'), 'lib/client.js 必须随包发布');
+});
+
 test('bundle patch 插入 dsh-citrus 行', () => {
   assert.ok(patch.includes('id: dsh-citrus'));
   assert.ok(patch.includes("name: 'dsh-citrus'"));

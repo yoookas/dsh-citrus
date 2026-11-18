@@ -4,6 +4,8 @@
  * 只有工具在当前会话可见时才输出这段文字（和 web 工具的做法一致）。
  */
 
+import { platformConfig } from './platforms/registry.js';
+
 const HINT = [
   '需要知乎内容（热榜、某个问题、回答正文、评论区观点）时，调用 zhihu_hot / zhihu_search / zhihu_read / zhihu_comments 获取真实数据。',
   '不要凭记忆编造知乎上的内容、数字或链接；引用时附上工具返回的知乎链接。',
@@ -18,7 +20,8 @@ export function registerPrompt(ctx, getConfig) {
       const visible = ctx.tools.get('zhihu_hot', scope) !== undefined
         || ctx.tools.get('zhihu_search', scope) !== undefined;
       const config = typeof getConfig === 'function' ? getConfig() : getConfig;
-      return visible && config.promptHint !== false ? HINT : '';
+      // 提醒只跟知乎有关，所以开关也在知乎那一段里。
+      return visible && platformConfig(config, 'zhihu').promptHint !== false ? HINT : '';
     }
   });
 }

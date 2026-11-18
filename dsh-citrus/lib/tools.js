@@ -11,6 +11,7 @@
  */
 
 import { friendlyMessage } from './core/errors.js';
+import { platformConfig } from './platforms/registry.js';
 import {
   renderComments, renderHot, renderItem, renderSearch, summarizeItem
 } from './render.js';
@@ -47,9 +48,10 @@ function collectDiagnostics(ctx, current) {
       namespaces: [],
       namespaceRegistered: false,
       values: {
-        hotLimit: current.hotLimit,
-        searchLimit: current.searchLimit,
-        commentLimit: current.commentLimit,
+        // 取不到的字段给 null：工具输出必须是可 JSON 序列化的，undefined 会让宿主直接判非法。
+        hotLimit: current.hotLimit ?? null,
+        searchLimit: current.searchLimit ?? null,
+        commentLimit: current.commentLimit ?? null,
         cookieConfigured: Boolean(String(current.cookie || '').trim()) || Boolean(String(current.cookieFile || '').trim())
       }
     },
@@ -76,7 +78,7 @@ function collectDiagnostics(ctx, current) {
         available: true,
         hasCitrus: ids.includes('dsh-citrus'),
         entries: ids.filter((id) => id === 'dsh-citrus' || id.includes('settings')),
-        clientPath: modules.clientPath('dsh-citrus')
+        clientPath: modules.clientPath('dsh-citrus') ?? null
       };
     }
   } catch (error) {
@@ -110,7 +112,9 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
     throw new TypeError('registerTools 需要宿主提供的 defineTool');
   }
   const config = () => (typeof getConfig === 'function' ? getConfig() : getConfig) || {};
-  const limit = (key, low, high) => clampInt(config()[key], DEFAULTS[key], low, high);
+  /** 知乎那一段配置：所有条数/字数都从这里取，平台字段的层级只在 registry.js 出现一次。 */
+  const platform = () => platformConfig(config(), 'zhihu');
+  const limit = (key, low, high) => clampInt(platform()[key], DEFAULTS[key], low, high);
 
   ctx.tools.register(defineTool({
     name: 'zhihu_hot',
@@ -127,7 +131,7 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
     async execute(args, exec) {
       try {
         if (Number(args.limit) === 0) {
-          const report = collectDiagnostics(ctx, config());
+          const report = collectDiagnostics(ctx, platform());
           return { ...report, markdown: JSON.stringify(report, null, 2) };
         }
         const count = clampInt(args.limit, limit('hotLimit', 1, 30), 1, 30);
@@ -252,7 +256,7 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
     timeoutMs: 15000,
     isConcurrencySafe: () => true,
     async execute() {
-      const current = config();
+      const current = platform();
       const report = {
         host: {
           settingsService: false,
@@ -290,7 +294,7 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
             available: true,
             hasCitrus: ids.includes('dsh-citrus'),
             entries: ids.filter((id) => id === 'dsh-citrus' || id.includes('settings')),
-            clientPath: modules.clientPath('dsh-citrus')
+            clientPath: modules.clientPath('dsh-citrus') ?? null
           };
         }
       } catch (error) {

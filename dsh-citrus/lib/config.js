@@ -1,12 +1,35 @@
 /**
  * 插件配置（cordis.patch.yml 里那个 config）。
  *
+ * 结构按平台分组，方便一个插件装多个平台：
+ *
+ *   platforms:
+ *     zhihu: { cookie, hotLimit, ... }
+ *     <下一个平台>: { ... }
+ *
+ * 新增平台的步骤：
+ *   1. 这里加一个 `xxx: z.object({...})`；
+ *   2. lib/platforms/ 下加适配器，并在 registry.js 的 PLATFORM_IDS 里登记；
+ *   3. lib/client.js 的 PLATFORMS 数组里加一项（配置页会自动多一个 tab）。
+ *
  * 数字都有上下界：模型/用户写错不会把请求节奏或上下文搞崩。
  */
 
 import z from '@deepseek-ai/schemastery';
 
-export const Config = z.object({
+/**
+ * 各家平台共有的连接与节流设置。
+ * 每个平台一份：不同站点的限流策略不该互相牵连。
+ */
+const transportFields = {
+  gapMs: z.natural().default(350).max(10000).description('请求最小间隔（毫秒）。别长期设 0，那是给自己找风控'),
+  jitterMs: z.natural().default(250).max(10000).description('请求随机抖动（毫秒）'),
+  timeoutMs: z.natural().default(20000).min(1000).max(120000).description('单次上游请求超时（毫秒）'),
+  maxRetries: z.natural().default(2).max(5).description('429/5xx/网络错误的重试次数')
+};
+
+/** 知乎：登录态 + 各工具默认条数。 */
+export const ZhihuConfig = z.object({
   cookie: z.string().role('secret').default('').description(
     '知乎 Cookie：粘贴浏览器里的 Copy as cURL（也认 Cookie 头 / 裸 Cookie 串 / JSON）。留空则读 cookieFile。'
   ),
@@ -20,13 +43,19 @@ export const Config = z.object({
   commentChars: z.natural().default(200).min(40).max(800).description('单条评论字数上限'),
   excerptChars: z.natural().default(120).min(20).max(600).description('列表摘要字数上限'),
   relatedAnswers: z.natural().default(3).min(0).max(5).description('读问题时附带几条高赞回答'),
-  gapMs: z.natural().default(350).max(10000).description('请求最小间隔（毫秒）。别长期设 0，那是给自己找风控'),
-  jitterMs: z.natural().default(250).max(10000).description('请求随机抖动（毫秒）'),
-  timeoutMs: z.natural().default(20000).min(1000).max(120000).description('单次上游请求超时（毫秒）'),
-  maxRetries: z.natural().default(2).max(5).description('429/5xx/网络错误的重试次数'),
-  promptHint: z.boolean().default(true).description('消息提到知乎时，在系统提示词里提醒模型调用工具')
+  promptHint: z.boolean().default(true).description('消息提到知乎时，在系统提示词里提醒模型调用工具'),
+  ...transportFields
 });
 
-// 桌面端设置只给标了 volatile 的字段生成表单；把整棵 schema 标成可热更新，
-// 插件页会自动出现 Cookie/条数等配置表单，保存后 Loader 原地更新 config。
+export const Config = z.object({
+  platforms: z.object({
+    zhihu: ZhihuConfig
+  })
+});
+
+// settings 只把带 volatile 标记的字段投影成表单；整棵 schema 标成可热更新，
+// 界面上就能改下面这些字段，保存后 Loader 原地更新 config。
+//
+// 注意这是 schema 的 meta 标记（settings 读 Config.meta.volatile），不是 z(...).volatile()：
+// 后者改的是校验输出类型（Volatile<T> 引用），跟表单无关。
 Config.meta.volatile = true;

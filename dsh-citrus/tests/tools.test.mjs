@@ -12,27 +12,33 @@ import { join } from 'node:path';
 
 import { MockUpstream } from './mock-upstream.mjs';
 import { writeCookieFile } from '../lib/store.js';
+import { platformConfig, resolveConfig } from '../lib/platforms/registry.js';
 import { CitrusRuntime } from '../lib/runtime.js';
 import { registerTools } from '../lib/tools.js';
 import { registerPrompt } from '../lib/prompt.js';
 
 function defaultConfig(overrides = {}) {
+  // 配置按平台分组：overrides 直接并进知乎那一段，调用点不用关心层级。
   return {
-    cookie: '',
-    cookieFile: '',
-    hotLimit: 10,
-    searchLimit: 8,
-    commentLimit: 20,
-    contentChars: 1500,
-    commentChars: 200,
-    excerptChars: 120,
-    relatedAnswers: 3,
-    gapMs: 0,
-    jitterMs: 0,
-    timeoutMs: 5000,
-    maxRetries: 0,
-    promptHint: true,
-    ...overrides
+    platforms: {
+      zhihu: {
+        cookie: '',
+        cookieFile: '',
+        hotLimit: 10,
+        searchLimit: 8,
+        commentLimit: 20,
+        contentChars: 1500,
+        commentChars: 200,
+        excerptChars: 120,
+        relatedAnswers: 3,
+        gapMs: 0,
+        jitterMs: 0,
+        timeoutMs: 5000,
+        maxRetries: 0,
+        promptHint: true,
+        ...overrides
+      }
+    }
   };
 }
 
@@ -40,6 +46,25 @@ function defaultConfig(overrides = {}) {
 function fakeDefineTool(options) {
   return { ...options };
 }
+
+test('Volatile 配置引用：解开之后设置才真的生效', () => {
+  const inner = defaultConfig({ hotLimit: 3 });
+  const ref = { get: () => inner };
+
+  // Config.meta.volatile 的插件收到的是 { get() }，直接读字段全是 undefined。
+  assert.deepEqual(resolveConfig(ref), inner);
+  assert.equal(platformConfig(resolveConfig(ref), 'zhihu').hotLimit, 3);
+
+  // 普通对象原样返回
+  assert.equal(platformConfig(resolveConfig(inner), 'zhihu').hotLimit, 3);
+
+  // 旧版扁平结构（没有 platforms）仍然可读，升级不炸
+  assert.equal(platformConfig({ hotLimit: 7 }, 'zhihu').hotLimit, 7);
+
+  // 缺平台段 / 空配置给空对象，不该抛
+  assert.deepEqual(platformConfig({}, 'zhihu'), {});
+  assert.deepEqual(resolveConfig(undefined), {});
+});
 
 function fakeContext() {
   const tools = new Map();
@@ -240,5 +265,19 @@ test('提示词段落：工具可见时输出指引，关闭开关时不注册',
     assert.equal(off.ctx._sections[0].text({ scope: {} }), '');
   } finally {
     await off.stop();
+  }
+});
+
+test('工具输出必须能无损 JSON 序列化（宿主会拒绝 undefined）', async () => {
+  // 宿主对声明 type: 'json' 的工具做无损 JSON 校验；任何一个 undefined 字段都会让整次调用失败。
+  const app = await boot({});
+  try {
+    const status = await app.ctx._tools.get('zhihu_status').execute({}, {});
+    assert.deepEqual(JSON.parse(JSON.stringify(status)), status);
+
+    const report = await app.ctx._tools.get('zhihu_hot').execute({ limit: 0 }, {});
+    assert.deepEqual(JSON.parse(JSON.stringify(report)), report);
+  } finally {
+    await app.stop();
   }
 });
