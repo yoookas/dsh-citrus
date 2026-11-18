@@ -14,7 +14,7 @@ DeepSeek Harness 的知乎内容插件：让 agent **真的去知乎抓内容**�
 ├── dsh-citrus/               # 插件本体（npm 包）
 │   ├── lib/                  # 插件代码
 │   ├── bin/cli.mjs           # auth / status / hot / logout
-│   └── tests/                # 30 个离线用例
+│   └── tests/                # 28 个离线用例
 ├── scripts/
 │   ├── install.mjs           # 装进某个 DSH profile
 │   ├── build.mjs             # 打 npm tarball

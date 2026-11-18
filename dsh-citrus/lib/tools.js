@@ -8,7 +8,6 @@
  *   * 失败时抛出一句带「下一步」的中文，交给工具流水线转成 Error: ...
  */
 
-import { defineTool } from '@deepseek-ai/dsh-tools';
 import { friendlyMessage } from './core/errors.js';
 import {
   renderComments, renderHot, renderItem, renderSearch, summarizeItem
@@ -32,8 +31,12 @@ function clampInt(value, fallback, low, high) {
  * @param {object} ctx
  * @param {object} config
  * @param {import('./runtime.js').CitrusRuntime} runtime
+ * @param {typeof import('@deepseek-ai/dsh-tools').defineTool} defineTool 宿主提供的工具定义器
  */
-export function registerTools(ctx, config, runtime) {
+export function registerTools(ctx, config, runtime, defineTool) {
+  if (typeof defineTool !== 'function') {
+    throw new TypeError('registerTools 需要宿主提供的 defineTool');
+  }
   const hotLimit = clampInt(config.hotLimit, 10, 1, 30);
   const searchLimit = clampInt(config.searchLimit, 8, 1, 20);
   const commentLimit = clampInt(config.commentLimit, 20, 1, 100);

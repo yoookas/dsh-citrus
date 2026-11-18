@@ -5,6 +5,7 @@
  */
 
 import { mkdirSync } from 'node:fs';
+import { defineTool } from '@deepseek-ai/dsh-tools';
 import { Config } from './config.js';
 import { registerPrompt } from './prompt.js';
 import { CitrusRuntime } from './runtime.js';
@@ -40,7 +41,7 @@ export function apply(ctx, config) {
 
   const runtime = new CitrusRuntime(config, log);
   ctx.effect(() => () => runtime.dispose());
-  registerTools(ctx, config, runtime);
+  registerTools(ctx, config, runtime, defineTool);
   registerPrompt(ctx, config);
   log('已加载（知乎工具：zhihu_hot / zhihu_search / zhihu_read / zhihu_comments）');
 }

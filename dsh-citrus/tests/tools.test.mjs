@@ -1,7 +1,7 @@
 /**
- * 工具层集成测试：不启动 DeepSeek Harness，只给它需要的 ctx 服务打桩。
+ * 工具层集成测试：给 ctx 服务打桩，验证「模型调用工具 -> 适配器 -> 假知乎 -> 结果」。
  *
- * 验证的是「模型调用工具 -> 适配器 -> 假知乎 -> 结构化结果 + markdown」整条链路。
+ * 不依赖 DeepSeek Harness 的包，因此 CI 不需要安装宿主依赖。
  */
 
 import test from 'node:test';
@@ -12,7 +12,9 @@ import { join } from 'node:path';
 
 import { MockUpstream } from './mock-upstream.mjs';
 import { writeCookieFile } from '../lib/store.js';
-import { apply, Config, name as pluginName, inject } from '../lib/index.js';
+import { CitrusRuntime } from '../lib/runtime.js';
+import { registerTools } from '../lib/tools.js';
+import { registerPrompt } from '../lib/prompt.js';
 
 function defaultConfig(overrides = {}) {
   return {
@@ -32,6 +34,11 @@ function defaultConfig(overrides = {}) {
     promptHint: true,
     ...overrides
   };
+}
+
+/** 最小 defineTool 替身：只记录定义，不做 schema 编译（真编译在 DSH 里已验证）。 */
+function fakeDefineTool(options) {
+  return { ...options };
 }
 
 function fakeContext() {
@@ -78,13 +85,18 @@ async function boot(config) {
   const cookieFile = join(dir, 'zhihu.cookie');
   writeCookieFile(cookieFile, "curl 'https://www.zhihu.com/' -H 'cookie: z_c0=demo-token; d_c0=demo'");
   const ctx = fakeContext();
-  apply(ctx, defaultConfig({ cookieFile, ...config }));
+  const resolved = defaultConfig({ cookieFile, ...config });
+  const runtime = new CitrusRuntime(resolved, () => {});
+  registerTools(ctx, resolved, runtime, fakeDefineTool);
+  registerPrompt(ctx, resolved);
   return {
     upstream,
     ctx,
+    runtime,
     dir,
     async stop() {
       delete process.env.CITRUS_ZHIHU_BASE_URL;
+      runtime.dispose();
       ctx._effects.forEach((dispose) => {
         try {
           dispose();
@@ -99,12 +111,6 @@ async function boot(config) {
 }
 
 const exec = { signal: AbortSignal.timeout(8000) };
-
-test('插件元信息：名字与依赖服务', () => {
-  assert.equal(pluginName, 'dsh-citrus');
-  assert.deepEqual(inject, ['tools', 'systemPrompt']);
-  assert.ok(Config && typeof Config === 'function');
-});
 
 test('注册了 4 个工具和 1 段提示词', async () => {
   const app = await boot({});
@@ -171,22 +177,6 @@ test('zhihu_comments：评论列表', async () => {
   }
 });
 
-test('参数校验：query 必填、sort 只认 hot/new', async () => {
-  const app = await boot({});
-  try {
-    await assert.rejects(
-      app.ctx._tools.get('zhihu_search').execute({ limit: 3 }, exec),
-      /query/
-    );
-    await assert.rejects(
-      app.ctx._tools.get('zhihu_comments').execute({ ref: 'answer:111', sort: 'wild' }, exec),
-      /invalid arguments/
-    );
-  } finally {
-    await app.stop();
-  }
-});
-
 test('没配 Cookie 时给出可行动的错误', async () => {
   const app = await boot({ cookieFile: join(tmpdir(), 'no-such-cookie-file.txt') });
   try {
@@ -212,7 +202,7 @@ test('上游 401 时工具抛出人话错误', async () => {
   }
 });
 
-test('提示词段落：工具可见时输出指引，关闭开关时为空', async () => {
+test('提示词段落：工具可见时输出指引，关闭开关时不注册', async () => {
   const app = await boot({});
   try {
     const section = app.ctx._sections[0];

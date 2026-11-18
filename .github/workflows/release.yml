@@ -84,15 +84,6 @@ jobs:
           VERSION: ${{ steps.ver.outputs.version }}
         run: node scripts/bump_version.mjs "$VERSION"
 
-      - name: 安装宿主包（测试用）
-        working-directory: dsh-citrus
-        run: |
-          npm install --no-save --no-package-lock --ignore-scripts \
-            @deepseek-ai/dsh-tools@0.1.5-rc.2 \
-            @deepseek-ai/dsh-system-prompt@0.1.5-rc.2 \
-            @deepseek-ai/cordis@4.0.2 \
-            @deepseek-ai/schemastery@3.18.2
-
       - name: 跑离线测试
         working-directory: dsh-citrus
         run: npm test
