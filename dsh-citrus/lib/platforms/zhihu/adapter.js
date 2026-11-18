@@ -22,7 +22,6 @@ export const BROWSER_HEADERS = {
 };
 
 const RAW_TTL = 300000;
-const LIST_TTL = 60000;
 const COMMENT_TTL = 120000;
 
 export const MAX_HOT = 30;
@@ -41,18 +40,6 @@ const clamp = (value, low, high, fallback) => {
   const number = Number.parseInt(value, 10);
   const base = Number.isFinite(number) ? number : fallback;
   return Math.max(low, Math.min(high, base));
-};
-
-const dedupe = (items) => {
-  const seen = new Set();
-  const out = [];
-  for (const item of items) {
-    const key = item.kind + ':' + item.id;
-    if (!item.id || seen.has(key)) continue;
-    seen.add(key);
-    out.push(item);
-  }
-  return out;
 };
 
 const upstreamTotal = (payload) => {

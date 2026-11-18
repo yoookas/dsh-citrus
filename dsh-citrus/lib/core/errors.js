@@ -75,12 +75,3 @@ export function friendlyMessage(error) {
   const step = NEXT_STEPS[error.code] || error.hint || '';
   return step ? base + step : base;
 }
-
-/** 把任意异常收敛成 CitrusError，避免工具里到处写类型判断。 */
-export function asCitrusError(error, platform = 'zhihu') {
-  if (error instanceof CitrusError) return error;
-  if (error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
-    return new CitrusError('network', '请求超时了。', '', { platform });
-  }
-  return new CitrusError('internal', error && error.message ? error.message : String(error), '', { platform });
-}
