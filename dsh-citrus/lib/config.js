@@ -26,3 +26,7 @@ export const Config = z.object({
   maxRetries: z.natural().default(2).max(5).description('429/5xx/网络错误的重试次数'),
   promptHint: z.boolean().default(true).description('消息提到知乎时，在系统提示词里提醒模型调用工具')
 });
+
+// 桌面端设置只给标了 volatile 的字段生成表单；把整棵 schema 标成可热更新，
+// 插件页会自动出现 Cookie/条数等配置表单，保存后 Loader 原地更新 config。
+Config.meta.volatile = true;
