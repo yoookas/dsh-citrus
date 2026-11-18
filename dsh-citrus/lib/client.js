@@ -29,26 +29,50 @@ window.__ModuleLoader__.load({
     /**
      * 配置页的 tab：一个平台一项，顺序就是 tab 顺序。
      *
-     * 新增平台时在这里加一项即可（字段路径会自动变成
-     * ["platforms", <id>, <key>]）。宿主侧要同时加 schema 段和适配器，
-     * 见 lib/config.js 顶部那三步。
+     * 每个字段的 kind 决定控件和写回语义：
+     *   number —— 数字框；留空 = 取消覆盖（unset）
+     *   text   —— 文本框；留空 = 取消覆盖
+     *   secret —— 密码框；留空 = 不修改（值读不回来，不能误清）
+     *   toggle —— 开关；总是写布尔值，要回默认用「恢复默认」
+     *
+     * 字段路径一律是 ["platforms", <平台 id>, <key>]。
      */
     const PLATFORMS = [
       {
         id: "zhihu",
         label: "知乎",
-        cookie: {
-          label: "知乎 Cookie",
-          placeholder: "粘贴新的 cURL / Cookie（留空表示不修改）",
-          hint: "浏览器里 F12 -> Network -> 右键任意知乎请求 -> Copy as cURL，把整段粘进来。面板保存过的 Cookie 优先于本地 Cookie 文件；清除后回退到文件。"
-        },
         fields: [
-          { key: "hotLimit", label: "热榜条数", hint: "1-30；知乎热榜不给翻页，30 就是上限。", min: 1, max: 30 },
-          { key: "searchLimit", label: "搜索条数", hint: "1-20。", min: 1, max: 20 },
-          { key: "commentLimit", label: "评论条数", hint: "1-100；上游每页只给 10/20 条。", min: 1, max: 100 },
-          { key: "contentChars", label: "单条正文字数上限", hint: "200-16000；太长会撑爆上下文。", min: 200, max: 16000 },
-          { key: "commentChars", label: "单条评论字数上限", hint: "40-800。", min: 40, max: 800 },
-          { key: "excerptChars", label: "列表摘要字数上限", hint: "20-600。", min: 20, max: 600 }
+          {
+            kind: "secret",
+            key: "cookie",
+            label: "知乎 Cookie",
+            placeholder: "粘贴新的 cURL / Cookie（留空表示不修改）",
+            hint: "浏览器里 F12 -> Network -> 右键任意知乎请求 -> Copy as cURL，把整段粘进来。面板保存过的 Cookie 优先于本地 Cookie 文件；清除后回退到文件。"
+          },
+          {
+            kind: "text",
+            key: "cookieFile",
+            label: "Cookie 文件",
+            placeholder: "留空 = <DSH_HOME>/dsh-citrus/zhihu.cookie",
+            hint: "把 Cookie 放文件里就填路径；推荐用 dsh-citrus auth 写入，面板里的 Cookie 优先级更高。"
+          },
+          { kind: "number", key: "hotLimit", label: "热榜条数", hint: "1-30；知乎热榜不给翻页，30 就是上限。", min: 1, max: 30 },
+          { kind: "number", key: "searchLimit", label: "搜索条数", hint: "1-20。", min: 1, max: 20 },
+          { kind: "number", key: "commentLimit", label: "评论条数", hint: "1-100；上游每页只给 10/20 条。", min: 1, max: 100 },
+          { kind: "number", key: "contentChars", label: "单条正文字数上限", hint: "200-16000；太长会撑爆上下文。", min: 200, max: 16000 },
+          { kind: "number", key: "commentChars", label: "单条评论字数上限", hint: "40-800。", min: 40, max: 800 },
+          { kind: "number", key: "excerptChars", label: "列表摘要字数上限", hint: "20-600。", min: 20, max: 600 },
+          { kind: "number", key: "relatedAnswers", label: "附带高赞回答数", hint: "读问题时默认带几条（0-5）。", min: 0, max: 5 },
+          {
+            kind: "toggle",
+            key: "promptHint",
+            label: "系统提示词指引",
+            hint: "消息提到知乎时，提醒模型用 zhihu_* 工具现场抓，别凭记忆编。"
+          },
+          { kind: "number", key: "gapMs", label: "请求最小间隔（ms）", hint: "0-10000。别长期设 0，那是给自己找风控。", min: 0, max: 10000 },
+          { kind: "number", key: "jitterMs", label: "随机抖动（ms）", hint: "0-10000，加在最小间隔之上。", min: 0, max: 10000 },
+          { kind: "number", key: "timeoutMs", label: "单次超时（ms）", hint: "1000-120000。", min: 1000, max: 120000 },
+          { kind: "number", key: "maxRetries", label: "重试次数", hint: "0-5；只对 429/5xx/网络错误重试。", min: 0, max: 5 }
         ]
       }
     ];
@@ -68,8 +92,6 @@ window.__ModuleLoader__.load({
       return current;
     }
 
-    const isBlank = (value) => value === undefined || value === null || String(value).trim() === "";
-
     const styles = {
       root: {
         display: "flex",
@@ -84,6 +106,7 @@ window.__ModuleLoader__.load({
       title: { margin: 0, fontSize: "15px", fontWeight: 600, color: "var(--dsw-alias-label-primary, #111827)" },
       description: { margin: 0, fontSize: "12px", lineHeight: 1.6, color: "var(--dsw-alias-label-tertiary, #6b7280)" },
       field: { display: "flex", flexDirection: "column", gap: "6px" },
+      toggle: { display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" },
       label: { fontSize: "13px", fontWeight: 500, color: "var(--dsw-alias-label-primary, #111827)" },
       input: {
         boxSizing: "border-box",
@@ -172,19 +195,39 @@ window.__ModuleLoader__.load({
       }
     };
 
-    function NumericField(props) {
+    /** 按 kind 渲染一个字段：数字框 / 文本框 / 密码框 / 开关。 */
+    function Field(props) {
+      const field = props.field;
+
+      if (field.kind === "toggle") {
+        return React.createElement("div", { style: styles.field },
+          React.createElement("label", { style: styles.toggle },
+            React.createElement("input", {
+              type: "checkbox",
+              checked: Boolean(props.value),
+              disabled: props.disabled,
+              onChange: (event) => props.onEdit(event.target.checked)
+            }),
+            React.createElement("span", { style: styles.label }, field.label)),
+          React.createElement("p", { style: styles.hint }, field.hint)
+        );
+      }
+
+      const type = field.kind === "secret" ? "password" : field.kind === "number" ? "number" : "text";
       return React.createElement("div", { style: styles.field },
-        React.createElement("label", { style: styles.label }, props.label),
+        React.createElement("label", { style: styles.label }, field.label),
         React.createElement("input", {
           style: styles.input,
-          type: "number",
-          min: props.min,
-          max: props.max,
+          type,
+          min: field.min,
+          max: field.max,
+          autoComplete: field.kind === "secret" ? "off" : undefined,
+          placeholder: field.placeholder,
           value: props.value,
           disabled: props.disabled,
           onChange: (event) => props.onEdit(event.target.value)
         }),
-        React.createElement("p", { style: styles.hint }, props.hint)
+        React.createElement("p", { style: styles.hint }, field.hint)
       );
     }
 
@@ -204,12 +247,13 @@ window.__ModuleLoader__.load({
       const platform = PLATFORMS.find((item) => item.id === active) || PLATFORMS[0];
       const keyOf = (path) => path.join(".");
       const edited = (path) => Object.prototype.hasOwnProperty.call(draft, keyOf(path));
-      const draftValue = (path) => {
+      const draftValue = (path, field) => {
         if (edited(path)) return draft[keyOf(path)];
         const current = valueAt(snapshot && snapshot.value, path);
+        if (field.kind === "toggle") return Boolean(current);
         return current === undefined || current === null ? "" : String(current);
       };
-      const edit = (path, text) => setDraft((previous) => ({ ...previous, [keyOf(path)]: text }));
+      const edit = (path, next) => setDraft((previous) => ({ ...previous, [keyOf(path)]: next }));
 
       // mutate/unset 返回布尔值：false 表示 Host 拒绝了这次写入（并发冲突或校验不过），
       // 不会抛异常。所以这里必须看返回值，不能写成「await 完就当成功」。
@@ -239,21 +283,34 @@ window.__ModuleLoader__.load({
           for (const field of item.fields) {
             const path = pathOf(item.id, field.key);
             if (!edited(path)) continue;
-            const text = String(draft[keyOf(path)]).trim();
+            const raw = draft[keyOf(path)];
+
+            if (field.kind === "toggle") {
+              ops.push({ op: "set", path, value: Boolean(raw) });
+              continue;
+            }
+
+            const text = String(raw ?? "").trim();
+            if (field.kind === "secret") {
+              // 密码框读不回原值：留空只表示「不修改」，绝不能当成清空。
+              if (text === "") continue;
+              ops.push({ op: "set", path, value: text });
+              continue;
+            }
             if (text === "") {
               ops.push({ op: "unset", path });
               continue;
             }
-            const number = Number(text);
-            if (!Number.isInteger(number) || number < field.min || number > field.max) {
-              setMessage({ kind: "error", text: "「" + item.label + " · " + field.label + "」要填 " + field.min + "-" + field.max + " 的整数。" });
-              return;
+            if (field.kind === "number") {
+              const number = Number(text);
+              if (!Number.isInteger(number) || number < field.min || number > field.max) {
+                setMessage({ kind: "error", text: "「" + item.label + " · " + field.label + "」要填 " + field.min + "-" + field.max + " 的整数。" });
+                return;
+              }
+              ops.push({ op: "set", path, value: number });
+              continue;
             }
-            ops.push({ op: "set", path, value: number });
-          }
-          const cookiePath = pathOf(item.id, "cookie");
-          if (edited(cookiePath) && !isBlank(draft[keyOf(cookiePath)])) {
-            ops.push({ op: "set", path: cookiePath, value: String(draft[keyOf(cookiePath)]).trim() });
+            ops.push({ op: "set", path, value: text });
           }
         }
         if (ops.length === 0) {
@@ -263,11 +320,12 @@ window.__ModuleLoader__.load({
         run(() => form.mutate(ops, snapshot.revision), "已保存，下一次工具调用立即生效。");
       };
 
-      // 只清当前 tab 这个平台：form.unset(key) 只认顶层字段名，
+      // 「清除 Cookie」只清当前 tab 这个平台：form.unset(key) 只认顶层字段名，
       // 嵌套路径必须走 mutate，否则会写到 ["cookie"] 而不是 ["platforms", id, "cookie"]。
+      const secretField = platform.fields.find((field) => field.kind === "secret");
       const clearCookie = () => {
-        if (!writable) return;
-        const path = pathOf(platform.id, "cookie");
+        if (!writable || secretField === undefined) return;
+        const path = pathOf(platform.id, secretField.key);
         run(
           () => form.mutate([{ op: "unset", path }], snapshot.revision),
           "已清除「" + platform.label + "」保存的 Cookie；会回退到 Cookie 文件或组合配置。"
@@ -279,7 +337,6 @@ window.__ModuleLoader__.load({
         const ops = [];
         for (const item of PLATFORMS) {
           for (const field of item.fields) ops.push({ op: "unset", path: pathOf(item.id, field.key) });
-          ops.push({ op: "unset", path: pathOf(item.id, "cookie") });
         }
         run(() => form.mutate(ops, snapshot.revision), "已恢复默认（不会删除本地 Cookie 文件）。");
       };
@@ -309,29 +366,12 @@ window.__ModuleLoader__.load({
             onClick: () => setActive(item.id)
           }, item.label))),
 
-        React.createElement("div", { style: styles.field },
-          React.createElement("label", { style: styles.label }, platform.cookie.label),
-          React.createElement("input", {
-            style: styles.input,
-            type: "password",
-            autoComplete: "off",
-            placeholder: platform.cookie.placeholder,
-            value: draftValue(pathOf(platform.id, "cookie")),
-            disabled,
-            onChange: (event) => edit(pathOf(platform.id, "cookie"), event.target.value)
-          }),
-          React.createElement("p", { style: styles.hint }, platform.cookie.hint)
-        ),
-
-        platform.fields.map((field) => React.createElement(NumericField, {
+        platform.fields.map((field) => React.createElement(Field, {
           key: platform.id + "." + field.key,
-          label: field.label,
-          hint: field.hint,
-          min: field.min,
-          max: field.max,
-          value: draftValue(pathOf(platform.id, field.key)),
+          field,
+          value: draftValue(pathOf(platform.id, field.key), field),
           disabled,
-          onEdit: (text) => edit(pathOf(platform.id, field.key), text)
+          onEdit: (next) => edit(pathOf(platform.id, field.key), next)
         })),
 
         message === null ? null : React.createElement("p", {
@@ -351,7 +391,7 @@ window.__ModuleLoader__.load({
             disabled,
             onClick: resetAll
           }, "恢复默认"),
-          React.createElement("button", {
+          secretField === undefined ? null : React.createElement("button", {
             type: "button",
             style: styles.danger,
             disabled,

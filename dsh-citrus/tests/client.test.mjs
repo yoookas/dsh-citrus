@@ -212,6 +212,61 @@ test('平台以 tab 呈现：一个平台一个页签', async () => {
   assert.equal(tabs[0].props['aria-selected'], true, '默认选中第一个平台');
 });
 
+test('面板覆盖全部配置字段（数字 / 文本 / 密码 / 开关）', async () => {
+  const { Page, react } = await mount({
+    subscribe: () => () => {},
+    getSnapshot: () => ({ status: 'ready', writable: true, revision: 1, value: { platforms: { zhihu: {} } } })
+  });
+
+  const tree = render(react, Page, {});
+  const inputs = findAll(tree, (element) => element.type === 'input');
+  const countOf = (type) => inputs.filter((element) => element.props.type === type).length;
+
+  // schema 里一共 14 个字段，面板不该漏掉任何一个（以前漏了 7 个，只能去改 yaml）。
+  assert.equal(inputs.length, 14);
+  assert.equal(countOf('number'), 11);
+  assert.equal(countOf('text'), 1);
+  assert.equal(countOf('password'), 1);
+  assert.equal(countOf('checkbox'), 1);
+});
+
+test('文本留空写 unset，开关写布尔值', async () => {
+  const calls = [];
+  const form = {
+    subscribe: () => () => {},
+    getSnapshot: () => ({
+      status: 'ready',
+      writable: true,
+      revision: 2,
+      value: { platforms: { zhihu: { cookieFile: 'C:/x.cookie', promptHint: true } } }
+    }),
+    mutate: async (ops, revision) => {
+      calls.push({ ops, revision });
+      return true;
+    },
+    unset: async () => true
+  };
+  const { Page, react } = await mount(form);
+
+  let tree = render(react, Page, {});
+  findAll(tree, (element) => element.props?.type === 'text')[0]
+    .props.onChange({ target: { value: '' } });
+  findAll(tree, (element) => element.props?.type === 'checkbox')[0]
+    .props.onChange({ target: { checked: false } });
+
+  tree = render(react, Page, {});
+  const saveButton = findAll(tree, (element) => element.type === 'button' && textOf(element) === '保存设置');
+  await saveButton[0].props.onClick();
+
+  assert.deepEqual(calls, [{
+    ops: [
+      { op: 'unset', path: ['platforms', 'zhihu', 'cookieFile'] },
+      { op: 'set', path: ['platforms', 'zhihu', 'promptHint'], value: false }
+    ],
+    revision: 2
+  }]);
+});
+
 test('保存只提交改过的字段，并带上读到的 revision', async () => {
   const calls = [];
   const form = {
