@@ -1,0 +1,5 @@
+# 作为 profile bundle 被启用时，插入 dsh-citrus 这一行。
+- insert:
+    - id: dsh-citrus
+      name: 'dsh-citrus'
+      config: {}

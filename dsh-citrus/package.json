@@ -6,7 +6,6 @@
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
-    "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
   "bin": {
@@ -44,12 +43,8 @@
     "@deepseek-ai/schemastery": ">=3.0.0"
   },
   "dsh": {
-    "client": {
-      "inject": [
-        "@deepseek-ai/dsh-client-ui-settings"
-      ],
-      "platform": "web",
-      "immediately": true
+    "bundle": {
+      "patch": "./cordis.patch.yml"
     }
   }
 }

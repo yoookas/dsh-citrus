@@ -178,6 +178,43 @@ function linkSharedPackage() {
   }
 }
 
+function ensureProfileBundle() {
+  const pkgPath = join(profileDir, 'package.json');
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+  pkg.dependencies = pkg.dependencies || {};
+  pkg.dependencies['dsh-citrus'] = 'file:' + target.replace(/\\/g, '/');
+  pkg.dsh = pkg.dsh || {};
+  pkg.dsh.profile = pkg.dsh.profile || {};
+  const bundles = Array.isArray(pkg.dsh.profile.bundles) ? pkg.dsh.profile.bundles : [];
+  if (!bundles.includes('dsh-citrus')) bundles.push('dsh-citrus');
+  pkg.dsh.profile.bundles = bundles;
+  const backup = pkgPath + '.bak-' + new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+  if (!dryRun) {
+    cpSync(pkgPath, backup);
+    writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
+  }
+  log('已把 dsh-citrus 加为 profile bundle（依赖 + bundles）');
+}
+
+function removeProfileBundle() {
+  const pkgPath = join(profileDir, 'package.json');
+  if (!existsSync(pkgPath)) return;
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+  let changed = false;
+  if (pkg.dependencies && pkg.dependencies['dsh-citrus'] !== undefined) {
+    delete pkg.dependencies['dsh-citrus'];
+    changed = true;
+  }
+  const bundles = pkg.dsh?.profile?.bundles;
+  if (Array.isArray(bundles) && bundles.includes('dsh-citrus')) {
+    pkg.dsh.profile.bundles = bundles.filter((name) => name !== 'dsh-citrus');
+    changed = true;
+  }
+  if (!changed) return;
+  if (!dryRun) writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
+  log('已从 profile bundle 列表移除 dsh-citrus');
+}
+
 function installFiles() {
   if (!existsSync(SOURCE)) throw new Error('找不到插件源码：' + SOURCE);
   if (existsSync(target)) {
@@ -222,6 +259,7 @@ function main() {
 
   if (uninstall) {
     removePatch();
+    removeProfileBundle();
     if (existsSync(sharedLink) && lstatSync(sharedLink).isSymbolicLink()) {
       if (!dryRun) rmSync(sharedLink, { force: true });
       log('已删除 profiles/node_modules/dsh-citrus 链接');
@@ -240,7 +278,8 @@ function main() {
   installFiles();
   linkModules();
   linkSharedPackage();
-  updatePatch();
+  removePatch();
+  ensureProfileBundle();
   printNextSteps();
 }
 
