@@ -278,12 +278,11 @@ test('工具输出必须能无损 JSON 序列化（宿主会拒绝 undefined）'
     const report = await app.ctx._tools.get('zhihu_hot').execute({ limit: 0 }, {});
     assert.deepEqual(JSON.parse(JSON.stringify(report)), report);
 
-    // 真实 Host 里这三个服务都在；Loader 条目不一定带 disabled、clientPath 可能没有值，
-    // 这些「可选」字段一旦原样透出 undefined，整次工具调用就会被判非法。
+    // 真实 Host 里这两个服务都在；clientPath 可能没有值，
+    // 这种「可选」字段一旦原样透出 undefined，整次工具调用就会被判非法。
     const services = {
       settings: { describe: () => [{ ns: 'dsh-citrus' }] },
-      clientModules: { graph: () => ({ entries: [{ id: 'dsh-citrus' }] }), clientPath: () => undefined },
-      loader: { entries: () => [{ options: { name: 'dsh-citrus' }, fiber: { state: 2 } }] }
+      clientModules: { graph: () => ({ entries: [{ id: 'dsh-citrus' }] }), clientPath: () => undefined }
     };
     app.ctx.get = (name) => services[name];
 

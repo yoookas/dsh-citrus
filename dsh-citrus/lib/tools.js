@@ -10,8 +10,10 @@
  * 条数/字数等上限每次调用时从 getConfig() 取：面板里改完设置立即生效。
  */
 
+import { writeFileSync } from 'node:fs';
 import { friendlyMessage } from './core/errors.js';
 import { PLATFORM_DEFAULTS, platformConfig } from './platforms/registry.js';
+import { dataDir } from './store.js';
 import {
   renderComments, renderHot, renderItem, renderSearch, summarizeItem
 } from './render.js';
@@ -33,6 +35,17 @@ function clampInt(value, fallback, low, high) {
   return Math.max(low, Math.min(high, base));
 }
 
+/**
+ * 收敛成「无损 JSON」：宿主对 type: 'json' 的工具输出做 JSON 往返比对，
+ * 任何一个 undefined（对象里或数组里）或带原型的实例都会让整次调用被判非法。
+ * 这一层是兜底，字段自己该给 null 的还是要给。
+ * @param {unknown} value 工具要返回的原始值
+ * @returns {unknown} 能安全穿过 wire 的同一份数据
+ */
+function jsonSafe(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 /** 收集 Host 侧的加载/配置诊断（不输出 Cookie 值）。 */
 function collectDiagnostics(ctx, current) {
   const report = {
@@ -48,8 +61,7 @@ function collectDiagnostics(ctx, current) {
         cookieConfigured: Boolean(String(current.cookie || '').trim()) || Boolean(String(current.cookieFile || '').trim())
       }
     },
-    clientModules: { available: false },
-    loader: { entries: [] }
+    clientModules: { available: false }
   };
   try {
     const settings = ctx.get('settings');
@@ -76,21 +88,6 @@ function collectDiagnostics(ctx, current) {
     }
   } catch (error) {
     report.clientModules.error = String(error && error.message ? error.message : error);
-  }
-  try {
-    const loader = ctx.get('loader');
-    if (loader) {
-      report.loader.entries = loader.entries()
-        .filter((entry) => String(entry.options.name || '').includes('dsh-citrus'))
-        .map((entry) => ({
-          // 这几个字段在 Loader 那边都可能是空的；原样透出 undefined 会让整个工具输出被判非法。
-          name: entry.options.name ?? null,
-          disabled: Boolean(entry.disabled),
-          fiber: entry.fiber === undefined ? null : entry.fiber.state ?? null
-        }));
-    }
-  } catch (error) {
-    report.loader.error = String(error && error.message ? error.message : error);
   }
   return report;
 }
@@ -125,7 +122,7 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
     async execute(args, exec) {
       try {
         if (Number(args.limit) === 0) {
-          const report = collectDiagnostics(ctx, platform());
+          const report = jsonSafe(collectDiagnostics(ctx, platform()));
           return { ...report, markdown: JSON.stringify(report, null, 2) };
         }
         const count = clampInt(args.limit, limit('hotLimit', 1, 30), 1, 30);
@@ -250,7 +247,13 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
     timeoutMs: 15000,
     isConcurrencySafe: () => true,
     async execute() {
-      const report = collectDiagnostics(ctx, platform());
+      const report = jsonSafe(collectDiagnostics(ctx, platform()));
+      // 落一份快照：工具本身返回失败时，还能从文件里看真实内容。
+      try {
+        writeFileSync(dataDir() + '/status.json', JSON.stringify(report, null, 2), 'utf8');
+      } catch {
+        /* 只读环境里写不了就算了 */
+      }
       return { ...report, markdown: JSON.stringify(report, null, 2) };
     }
   }));

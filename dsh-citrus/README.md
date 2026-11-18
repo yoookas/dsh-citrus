@@ -172,7 +172,10 @@ tab、控件、写回语义都由 `PLATFORMS` 决定，不用再写 UI 代码。
 | `host.namespaceRegistered` | `true`——配置命名空间在，面板才有对象可改 |
 | `host.values.hotLimit` 等 | 面板上设的值；改完面板再跑一次应该跟着变 |
 | `clientModules.hasCitrus` | `true`——浏览器半侧进了启动图，界面才有入口 |
-| `loader.entries[].fiber` | 不是 `null`——插件条目真的起来了 |
+| `clientModules.clientPath` | 指向本包的 `lib/client.js`；是 `null` 说明 bundle 没被扫到 |
+
+> 工具每次运行都会把这份报告写进 `<DSH_HOME>/dsh-citrus/status.json`，
+> 返回值本身被判非法时，还能从文件里看真实内容。
 
 > **改完宿主代码要重启一次 DeepSeek Harness。** 开关插件只会重跑入口文件，
 > 被 import 过的模块仍在 Node 的 ESM 缓存里，不重启不会加载新版本；
