@@ -26,8 +26,8 @@ jobs:
           npm install --no-save --no-package-lock --ignore-scripts \
             @deepseek-ai/dsh-tools@0.1.5-rc.2 \
             @deepseek-ai/dsh-system-prompt@0.1.5-rc.2 \
-            @deepseek-ai/cordis@4.1.0 \
-            @deepseek-ai/schemastery@3.19.0
+            @deepseek-ai/cordis@4.0.2 \
+            @deepseek-ai/schemastery@3.18.2
 
       - name: 跑离线测试
         run: npm test
