@@ -1,0 +1,45 @@
+{
+  "name": "dsh-citrus",
+  "version": "26.11.02",
+  "description": "知乎热榜 / 问题 / 回答 / 评论采集插件（DeepSeek Harness）",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "dsh-citrus": "bin/cli.mjs"
+  },
+  "files": [
+    "lib",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test tests/citrus.test.mjs tests/tools.test.mjs",
+    "check": "node --check lib/index.js"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "zhihu",
+    "citrus"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yoookas/dsh-citrus.git",
+    "directory": "dsh-citrus"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.0",
+    "@deepseek-ai/dsh-system-prompt": ">=0.1.0",
+    "@deepseek-ai/dsh-tools": ">=0.1.0",
+    "@deepseek-ai/schemastery": ">=3.0.0"
+  }
+}

@@ -33,14 +33,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 安装 Python
-        uses: actions/setup-python@v5
+      - name: 安装 Node
+        uses: actions/setup-node@v4
         with:
-          python-version: "3.12"
-
-      - name: 跑测试
-        working-directory: astrbot_plugin_citrus
-        run: python -m unittest discover -s tests -t . -v
+          node-version: "22"
 
       - name: 计算版本号（YY.MM.TT）
         id: ver
@@ -75,7 +71,20 @@ jobs:
       - name: 写入插件版本号
         env:
           VERSION: ${{ steps.ver.outputs.version }}
-        run: python scripts/bump_version.py "$VERSION"
+        run: node scripts/bump_version.mjs "$VERSION"
+
+      - name: 安装宿主包（测试用）
+        working-directory: dsh-citrus
+        run: |
+          npm install --no-save --no-package-lock --ignore-scripts \
+            @deepseek-ai/dsh-tools@0.1.5-rc.2 \
+            @deepseek-ai/dsh-system-prompt@0.1.5-rc.2 \
+            @deepseek-ai/cordis@4.1.0 \
+            @deepseek-ai/schemastery@3.19.0
+
+      - name: 跑离线测试
+        working-directory: dsh-citrus
+        run: npm test
 
       - name: 提交版本号并打 tag（仅手动触发）
         if: github.event_name == 'workflow_dispatch'
@@ -87,10 +96,10 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- astrbot_plugin_citrus/metadata.yaml; then
+          if git diff --quiet -- dsh-citrus/package.json; then
             echo "版本号没变化，跳过提交"
           else
-            git add astrbot_plugin_citrus/metadata.yaml
+            git add dsh-citrus/package.json
             git commit -m "chore(release): $VERSION"
             git push origin "HEAD:$DEFAULT_BRANCH"
           fi
@@ -101,10 +110,10 @@ jobs:
             git push origin "$TAG"
           fi
 
-      - name: 打包 zip
+      - name: 构建 tarball
         env:
           VERSION: ${{ steps.ver.outputs.version }}
-        run: python scripts/build_zip.py "$VERSION"
+        run: node scripts/build.mjs "$VERSION"
 
       - name: 生成发布说明
         env:
@@ -112,9 +121,9 @@ jobs:
           NOTE: ${{ github.event.inputs.note }}
         run: |
           set -euo pipefail
-          SUM="$(cut -d" " -f1 "dist/astrbot_plugin_citrus_$VERSION.zip.sha256")"
+          SUM="$(cut -d" " -f1 "dist/dsh-citrus-$VERSION.tgz.sha256")"
           {
-            echo "## 柑橘 · 知乎 v$VERSION"
+            echo "## dsh-citrus v$VERSION"
             echo ""
             echo "版本号规则 **YY.MM.TT**：年.月.本月第几次发布。"
             echo ""
@@ -123,13 +132,16 @@ jobs:
               echo ""
             fi
             echo "### 安装"
-            echo "1. 下载下面的 astrbot_plugin_citrus_$VERSION.zip"
-            echo "2. AstrBot WebUI → 插件 → 上传插件"
-            echo "3. 插件配置里粘贴浏览器复制的 cURL，保存后发 /知乎状态 自检"
+            echo "1. `git clone` 本仓库（或下载源码包）"
+            echo "2. `node scripts/install.mjs`"
+            echo "3. `node <DSH_HOME>/plugins/dsh-citrus/bin/cli.mjs auth` 粘贴浏览器 cURL"
+            echo "4. 重启一次 DeepSeek Harness，问「知乎热榜有什么」"
+            echo ""
+            echo "> 也可以只拿 `dsh-citrus-$VERSION.tgz` 解包到 `<DSH_HOME>/plugins/dsh-citrus`。"
             echo ""
             echo "### 校验"
             echo "```"
-            echo "$SUM  astrbot_plugin_citrus_$VERSION.zip"
+            echo "$SUM  dsh-citrus-$VERSION.tgz"
             echo "```"
           } > dist/notes.md
           cat dist/notes.md
@@ -142,11 +154,11 @@ jobs:
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG 已存在，改为覆盖附件"
-            gh release upload "$TAG" "dist/astrbot_plugin_citrus_$VERSION.zip" "dist/astrbot_plugin_citrus_$VERSION.zip.sha256" --clobber
+            gh release upload "$TAG" "dist/dsh-citrus-$VERSION.tgz" "dist/dsh-citrus-$VERSION.tgz.sha256" --clobber
           else
             gh release create "$TAG" \
-              "dist/astrbot_plugin_citrus_$VERSION.zip" \
-              "dist/astrbot_plugin_citrus_$VERSION.zip.sha256" \
+              "dist/dsh-citrus-$VERSION.tgz" \
+              "dist/dsh-citrus-$VERSION.tgz.sha256" \
               --title "v$VERSION" \
               --notes-file dist/notes.md \
               --latest

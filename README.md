@@ -1,102 +1,76 @@
-# citrus
+# dsh-citrus
 
-AstrBot 的知乎内容插件：用户在群里问「知乎热榜有什么」「这个问题大家怎么看」「评论区在争什么」
-的时候，机器人**真的去知乎抓内容**，再交给模型总结 —— 而不是凭记忆编。
+DeepSeek Harness 的知乎内容插件：让 agent **真的去知乎抓内容**，而不是凭记忆编。
 
-采集层用的是 **citrus**（统一社交平台读接口），以 vendor 方式内置在插件里，
-所以插件是自包含的：**不需要 pip 安装、不需要另外起服务**。
+- 4 个模型工具：`zhihu_hot` / `zhihu_search` / `zhihu_read` / `zhihu_comments`
+- 1 条系统提示词指引，只在工具可见时注入
+- 零运行时依赖（只用 Node 内置模块）
+- 只读、限速、如实报错
 
 ## 目录
 
 ```
 .
-├── astrbot_plugin_citrus/       # 插件本体（打进 zip 的就是这个目录）
-│   ├── main.py                  # Star 子类：4 个 LLM 工具 + 6 个指令 + 白名单
-│   ├── bridge.py                # citrus 异步门面（to_thread + 串行锁 + 错误翻译）
-│   ├── render.py                # 统一模型 → 紧凑文本
-│   ├── _conf_schema.json        # WebUI 配置表单
-│   ├── metadata.yaml            # 插件元数据（版本号在这里）
-│   ├── vendor/citrus/           # 原样内置的采集库
-│   └── tests/                   # 离线测试（不进 zip）
+├── dsh-citrus/               # 插件本体（npm 包）
+│   ├── lib/                  # 插件代码
+│   ├── bin/cli.mjs           # auth / status / hot / logout
+│   └── tests/                # 30 个离线用例
 ├── scripts/
-│   ├── build_zip.py             # 打 AstrBot 能直接安装的 zip
-│   └── bump_version.py          # 改 metadata.yaml 的版本号
-└── .github/workflows/           # CI 与 Release
+│   ├── install.mjs           # 装进某个 DSH profile
+│   ├── build.mjs             # 打 npm tarball
+│   └── bump_version.mjs      # 改版本号
+└── .github/workflows/        # CI 与 Release
 ```
 
-## 安装
+## 快速开始
 
-1. 到 [Releases](../../releases) 下载 `astrbot_plugin_citrus_<版本>.zip`；
-2. AstrBot WebUI → 插件 → 上传插件；
-3. 浏览器登录知乎 → F12 → Network → 右键任意知乎请求 → **Copy as cURL** →
-   粘贴进插件配置的「知乎 Cookie」 → 保存；
-4. 发 `/知乎状态` 自检，再发 `/知乎热榜` 试试。
+```bash
+# 1. 安装到当前 DeepSeek Harness profile
+node scripts/install.mjs
 
-白名单：先发 `/sid` 拿到自己的用户 ID，填进配置的「允许使用的用户 ID」。
+# 2. 配置知乎 Cookie（粘贴浏览器 Copy as cURL 的内容）
+node "$env:USERPROFILE/.dsh/plugins/dsh-citrus/bin/cli.mjs" auth
 
-详细说明见 [astrbot_plugin_citrus/README.md](astrbot_plugin_citrus/README.md)。
+# 3. 重启一次 DeepSeek Harness，然后问：「知乎热榜有什么」
+```
 
-## 能力
+详细说明见 [dsh-citrus/README.md](dsh-citrus/README.md)。
 
-| 方式 | 触发 |
-|---|---|
-| 模型自动调用 | `zhihu_hot` / `zhihu_search` / `zhihu_read` / `zhihu_comments` 四个 function calling 工具 |
-| 确定性指令 | `/知乎热榜` `/知乎搜` `/知乎看` `/知乎评论` `/知乎状态` `/知乎帮助` |
+## 兼容性
+
+在 **DeepSeek Harness 0.1.5-rc.2 / Node 24** 上验证过：
+
+- 最小插件树启动（`tools` + `systemPrompt` + 本插件）→ 4 个工具注册成功；
+- 克隆 desktop profile、带完整 patch 启动 web 应用 → 插件正常激活；
+- 真实知乎链路（`cli.mjs status` / `hot`）→ 账号与热榜均正常。
+
+宿主包（`@deepseek-ai/dsh-tools` 等）通过 profile 的 `node_modules` 解析，插件本身不打包它们。
 
 ## 版本号规则
 
-`YY.MM.TT`：
+`YY.MM.TT`：年.月.本月第几次发布，例 `26.11.02` = 2026 年 11 月第二次发布。
 
-- **YY** —— 年份后两位（26 = 2026）
-- **MM** —— 月份（01-12）
-- **TT** —— **本月第几次发布**，从 01 开始
+## 发布
 
-例：`26.11.01` 是 2026 年 11 月第一次发版，同月再发就是 `26.11.02`；换月自动回到 `01`。
+Actions → **Release** → **Run workflow**：
 
-## 发布新版本
+1. 自动算出本月下一个 TT；
+2. 跑测试，改 `dsh-citrus/package.json` 版本号并提交；
+3. 打 tag `vYY.MM.TT`；
+4. 构建 `dist/dsh-citrus-YY.MM.TT.tgz`，发 Release（附 sha256）。
 
-两种方式都会：跑测试 → 打包 zip → 建 GitHub Release（附 zip 与 sha256）。
+也可以自己推 tag：`git tag v26.11.03 && git push origin v26.11.03`。
 
-### ① 手动触发（推荐）
-
-Actions → **Release** → **Run workflow**。
-
-版本号自动算：取当月已有的 `vYY.MM.*` 标签，最大 TT 加一；然后自动提交版本号、
-打 tag、发版。同一个地方点第二次，就是本月第二次发布。
-
-### ② 自己推 tag
+## 开发
 
 ```bash
-git tag v26.11.03
-git push origin v26.11.03
+cd dsh-citrus
+npm test
 ```
 
-按 tag 里的版本号发版（格式不符会让 workflow 直接失败）。
-
-## 本地开发
-
-```bash
-# 插件离线测试：起一个假知乎，跑通所有工具与指令（20 个用例）
-cd astrbot_plugin_citrus
-python -m unittest discover -s tests -t . -v
-
-# 真实链路冒烟（可选，只发一个请求；需要本机 ~/.citrus 里有 Cookie）
-python tests/live_check.py
-```
-
-```bash
-# 打包
-python scripts/build_zip.py              # 版本号取 metadata.yaml
-python scripts/build_zip.py 26.11.02     # 指定版本号
-```
-
-打包产物在 `dist/`，结构是 `astrbot_plugin_citrus/...`，正好是 WebUI 能吃的样子。
-
-## 内置的 citrus
-
-`astrbot_plugin_citrus/vendor/citrus/` 是上游 citrus 项目的原样副本（未改一行），
-升级方式与注意事项见 [vendor/README.md](astrbot_plugin_citrus/vendor/README.md)。
+离线测试会起一个假知乎（本地 HTTP 服务），覆盖 Cookie 解析、热榜/搜索/正文/评论、错误翻译、
+渲染和工具注册执行，**不需要联网、不需要真 Cookie**。
 
 ## 许可
 
-MIT，见 [LICENSE](LICENSE)。`vendor/citrus/` 是第三方代码，遵循它自带的 LICENSE。
+MIT，见 [LICENSE](LICENSE)。

@@ -9,26 +9,50 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dsh-citrus
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 安装 Python
-        uses: actions/setup-python@v5
+      - name: 安装 Node
+        uses: actions/setup-node@v4
         with:
-          python-version: "3.12"
+          node-version: "22"
 
-      - name: 跑插件测试
-        working-directory: astrbot_plugin_citrus
-        run: python -m unittest discover -s tests -t . -v
-
-      - name: 校验配置文件
+      - name: 安装宿主包（仅测试用，不写回 package.json）
         run: |
-          python - <<'PY'
-          import json, pathlib
-          json.loads(pathlib.Path("astrbot_plugin_citrus/_conf_schema.json").read_text(encoding="utf-8"))
-          print("_conf_schema.json OK")
-          PY
+          npm install --no-save --no-package-lock --ignore-scripts \
+            @deepseek-ai/dsh-tools@0.1.5-rc.2 \
+            @deepseek-ai/dsh-system-prompt@0.1.5-rc.2 \
+            @deepseek-ai/cordis@4.1.0 \
+            @deepseek-ai/schemastery@3.19.0
 
-      - name: 试打包（不发布）
-        run: python scripts/build_zip.py
+      - name: 跑离线测试
+        run: npm test
+
+      - name: 语法检查
+        run: |
+          for file in lib/index.js lib/config.js lib/tools.js lib/prompt.js lib/runtime.js lib/render.js lib/store.js lib/core/*.js lib/platforms/zhihu/*.js bin/cli.mjs; do
+            node --check "$file"
+          done
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 构建 tarball
+        run: node scripts/build.mjs
+
+      - name: 检查产物
+        run: |
+          ls -l dist/
+          tar -tzf dist/dsh-citrus-*.tgz | head -20
