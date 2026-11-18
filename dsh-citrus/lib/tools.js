@@ -90,9 +90,10 @@ function collectDiagnostics(ctx, current) {
       report.loader.entries = loader.entries()
         .filter((entry) => String(entry.options.name || '').includes('dsh-citrus'))
         .map((entry) => ({
-          name: entry.options.name,
-          disabled: entry.disabled,
-          fiber: entry.fiber === undefined ? null : entry.fiber.state
+          // 这几个字段在 Loader 那边都可能是空的；原样透出 undefined 会让整个工具输出被判非法。
+          name: entry.options.name ?? null,
+          disabled: Boolean(entry.disabled),
+          fiber: entry.fiber === undefined ? null : entry.fiber.state ?? null
         }));
     }
   } catch (error) {
@@ -307,9 +308,10 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
           report.loader.entries = loader.entries()
             .filter((entry) => String(entry.options.name || '').includes('dsh-citrus'))
             .map((entry) => ({
-              name: entry.options.name,
-              disabled: entry.disabled,
-              fiber: entry.fiber === undefined ? null : entry.fiber.state
+              // 这几个字段在 Loader 那边都可能是空的；原样透出 undefined 会让整个工具输出被判非法。
+              name: entry.options.name ?? null,
+              disabled: Boolean(entry.disabled),
+              fiber: entry.fiber === undefined ? null : entry.fiber.state ?? null
             }));
         }
       } catch (error) {
