@@ -39,6 +39,66 @@ function clampInt(value, fallback, low, high) {
   return Math.max(low, Math.min(high, base));
 }
 
+/** 收集 Host 侧的加载/配置诊断（不输出 Cookie 值）。 */
+function collectDiagnostics(ctx, current) {
+  const report = {
+    host: {
+      settingsService: false,
+      namespaces: [],
+      namespaceRegistered: false,
+      values: {
+        hotLimit: current.hotLimit,
+        searchLimit: current.searchLimit,
+        commentLimit: current.commentLimit,
+        cookieConfigured: Boolean(String(current.cookie || '').trim()) || Boolean(String(current.cookieFile || '').trim())
+      }
+    },
+    clientModules: { available: false },
+    loader: { entries: [] }
+  };
+  try {
+    const settings = ctx.get('settings');
+    if (settings) {
+      report.host.settingsService = true;
+      const described = settings.describe({ redactSecrets: true });
+      report.host.namespaces = described.map((row) => row.ns);
+      report.host.namespaceRegistered = report.host.namespaces.includes('dsh-citrus');
+    }
+  } catch (error) {
+    report.host.error = String(error && error.message ? error.message : error);
+  }
+  try {
+    const modules = ctx.get('clientModules');
+    if (modules) {
+      const graph = modules.graph();
+      const ids = graph.entries.map((row) => row.id);
+      report.clientModules = {
+        available: true,
+        hasCitrus: ids.includes('dsh-citrus'),
+        entries: ids.filter((id) => id === 'dsh-citrus' || id.includes('settings')),
+        clientPath: modules.clientPath('dsh-citrus')
+      };
+    }
+  } catch (error) {
+    report.clientModules.error = String(error && error.message ? error.message : error);
+  }
+  try {
+    const loader = ctx.get('loader');
+    if (loader) {
+      report.loader.entries = loader.entries()
+        .filter((entry) => String(entry.options.name || '').includes('dsh-citrus'))
+        .map((entry) => ({
+          name: entry.options.name,
+          disabled: entry.disabled,
+          fiber: entry.fiber === undefined ? null : entry.fiber.state
+        }));
+    }
+  } catch (error) {
+    report.loader.error = String(error && error.message ? error.message : error);
+  }
+  return report;
+}
+
 /**
  * @param {object} ctx
  * @param {() => object} getConfig
@@ -66,6 +126,10 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
     isConcurrencySafe: () => true,
     async execute(args, exec) {
       try {
+        if (Number(args.limit) === 0) {
+          const report = collectDiagnostics(ctx, config());
+          return { ...report, markdown: JSON.stringify(report, null, 2) };
+        }
         const count = clampInt(args.limit, limit('hotLimit', 1, 30), 1, 30);
         const page = await runtime.adapter().hot(count, { signal: exec.signal });
         return {
@@ -174,6 +238,81 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
       } catch (error) {
         throw toolFailure(error);
       }
+    }
+  }));
+
+  ctx.tools.register(defineTool({
+    name: 'zhihu_status',
+    description: '检查 dsh-citrus 的加载与配置状态（排查配置页不显示、Cookie 是否就绪时使用）。',
+    parameters: {},
+    output: {
+      schema: { type: 'json' },
+      render: (_args, value) => [{ type: 'text', text: value.markdown }]
+    },
+    timeoutMs: 15000,
+    isConcurrencySafe: () => true,
+    async execute() {
+      const current = config();
+      const report = {
+        host: {
+          settingsService: false,
+          namespaces: [],
+          namespaceRegistered: false,
+          values: {
+            hotLimit: current.hotLimit,
+            searchLimit: current.searchLimit,
+            commentLimit: current.commentLimit,
+            cookieConfigured: Boolean(String(current.cookie || '').trim()) || Boolean(String(current.cookieFile || '').trim())
+          }
+        },
+        clientModules: { available: false },
+        loader: { entries: [] }
+      };
+
+      try {
+        const settings = ctx.get('settings');
+        if (settings) {
+          report.host.settingsService = true;
+          const described = settings.describe({ redactSecrets: true });
+          report.host.namespaces = described.map((row) => row.ns);
+          report.host.namespaceRegistered = report.host.namespaces.includes('dsh-citrus');
+        }
+      } catch (error) {
+        report.host.error = String(error && error.message ? error.message : error);
+      }
+
+      try {
+        const modules = ctx.get('clientModules');
+        if (modules) {
+          const graph = modules.graph();
+          const ids = graph.entries.map((row) => row.id);
+          report.clientModules = {
+            available: true,
+            hasCitrus: ids.includes('dsh-citrus'),
+            entries: ids.filter((id) => id === 'dsh-citrus' || id.includes('settings')),
+            clientPath: modules.clientPath('dsh-citrus')
+          };
+        }
+      } catch (error) {
+        report.clientModules.error = String(error && error.message ? error.message : error);
+      }
+
+      try {
+        const loader = ctx.get('loader');
+        if (loader) {
+          report.loader.entries = loader.entries()
+            .filter((entry) => String(entry.options.name || '').includes('dsh-citrus'))
+            .map((entry) => ({
+              name: entry.options.name,
+              disabled: entry.disabled,
+              fiber: entry.fiber === undefined ? null : entry.fiber.state
+            }));
+        }
+      } catch (error) {
+        report.loader.error = String(error && error.message ? error.message : error);
+      }
+
+      return { ...report, markdown: JSON.stringify(report, null, 2) };
     }
   }));
 

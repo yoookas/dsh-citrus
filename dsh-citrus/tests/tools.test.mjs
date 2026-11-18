@@ -122,7 +122,7 @@ test('注册了 4 个工具和 1 段提示词', async () => {
   const app = await boot({});
   try {
     assert.deepEqual([...app.ctx._tools.keys()].sort(),
-      ['zhihu_comments', 'zhihu_hot', 'zhihu_read', 'zhihu_search']);
+      ['zhihu_comments', 'zhihu_hot', 'zhihu_read', 'zhihu_search', 'zhihu_status']);
     assert.equal(app.ctx._sections.length, 1);
     assert.equal(app.ctx._sections[0].name, 'tool:zhihu');
   } finally {

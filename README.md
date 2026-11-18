@@ -3,7 +3,7 @@
 DeepSeek Harness 的知乎内容插件：让 agent **真的去知乎抓内容**，而不是凭记忆编。
 
 - 4 个模型工具：`zhihu_hot` / `zhihu_search` / `zhihu_read` / `zhihu_comments`
-- 面板卡片：设置 → 插件 → 插件配置里配置 Cookie 与条数，保存即生效
+- 面板卡片：设置 → Citrus，或侧栏「插件」面板 → 内置插件配置 → 知乎内容；保存即生效
 - 1 条系统提示词指引，只在工具可见时注入
 - 零运行时依赖（只用 Node 内置模块）
 - 只读、限速、如实报错

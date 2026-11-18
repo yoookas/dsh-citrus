@@ -18,7 +18,7 @@
 import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..');
@@ -59,11 +59,14 @@ function backupPatch() {
 }
 
 function patchBlock() {
+  // 带版本查询串：Node 会按不同 URL 重新加载模块，client-modules 也会重新抓取
+  // 客户端 bundle，所以重装后不需要重启 DSH（裸包名会命中 ESM 缓存）。
+  const entry = pathToFileURL(join(target, 'lib', 'index.js')).href + '?v=' + Date.now().toString(36);
   return [
     START + ' (由 scripts/install.mjs 管理，重装会覆盖这一段)',
     '- insert:',
     '    - id: dsh-citrus',
-    '      name: ' + q('dsh-citrus'),
+    '      name: ' + q(entry),
     '      config:',
     '        cookieFile: ' + q(join(home, 'dsh-citrus', 'zhihu.cookie')),
     END

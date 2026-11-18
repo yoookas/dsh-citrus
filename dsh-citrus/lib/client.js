@@ -19,8 +19,8 @@ window.__ModuleLoader__.load({
 
     const NAMESPACE = "dsh-citrus";
     const SECTION_ID = "dsh-citrus";
-    const TITLE = "知乎";
-    const SUMMARY = "配置知乎 Cookie 与返回条数";
+    const TITLE = "Citrus";
+    const SUMMARY = "配置知乎 Cookie 与返回条数（后续支持更多平台）";
 
     const NUMERIC_FIELDS = [
       { key: "hotLimit", label: "热榜条数", hint: "1-30；知乎热榜不给翻页，30 就是上限。", min: 1, max: 30 },
@@ -199,14 +199,14 @@ window.__ModuleLoader__.load({
 
       if (!snapshot || snapshot.status === "unavailable") {
         return React.createElement("div", { style: styles.root },
-          React.createElement("h3", { style: styles.title }, "知乎内容（dsh-citrus）"),
+          React.createElement("h3", { style: styles.title }, "Citrus · 知乎"),
           React.createElement("p", { style: styles.hint }, "当前连接没有开放 dsh-citrus 设置。")
         );
       }
 
       return React.createElement("div", { style: styles.root },
         React.createElement("div", { style: styles.header },
-          React.createElement("h3", { style: styles.title }, "知乎内容（dsh-citrus）"),
+          React.createElement("h3", { style: styles.title }, "Citrus · 知乎"),
           React.createElement("p", { style: styles.description },
             "配置知乎登录态与返回条数。保存后立即生效，无需重启。Cookie 保存后不会回显。")
         ),
@@ -264,8 +264,8 @@ window.__ModuleLoader__.load({
       );
     }
 
-    /** 只硬依赖 slots；configForms 在设置界面挂载后就绪。 */
-    const inject = ["slots"];
+    /** 与官方设置页一致：硬依赖 slots + configForms。 */
+    const inject = ["slots", "configForms"];
 
     /**
      * 注册两处配置入口：
@@ -274,39 +274,36 @@ window.__ModuleLoader__.load({
      * 两个 slot 都只在 Host 服务 dsh-citrus 命名空间期间注册。
      */
     function apply(ctx) {
-      ctx.inject(["configForms"], (formsCtx) => {
-        const form = formsCtx.configForms.get(NAMESPACE);
-        const Page = (props) => React.createElement(CitrusCardView, { form, close: props ? props.close : undefined });
-        const Summary = () => React.createElement(SummaryCard, { form });
+      const form = ctx.configForms.get(NAMESPACE);
+      const Page = (props) => React.createElement(CitrusCardView, { form, close: props ? props.close : undefined });
+      const Summary = () => React.createElement(SummaryCard, { form });
 
-        formsCtx.effect(() => formsCtx.configForms.whileServed([NAMESPACE], () => {
-          const disposers = [];
-          disposers.push(formsCtx.slots.inject("settings.section", () => formsCtx.slots.register({
-            name: "settings.section",
-            id: SECTION_ID,
-            order: 18,
-            label: () => TITLE
-          }, Page)));
-          disposers.push(formsCtx.slots.inject("plugins.item", () => formsCtx.slots.register({
-            name: "plugins.item",
-            id: SECTION_ID,
-            order: 50,
-            label: () => TITLE + "内容",
-            inject: () => ({ hooks: {} })
-          }, (props) => (props && props.view === "summary"
-            ? React.createElement(Summary, null)
-            : React.createElement(Page, props)))));
-          return () => {
-            for (const dispose of disposers) {
-              try {
-                dispose();
-              } catch {
-                /* 已释放 */
-              }
+      ctx.effect(() => ctx.configForms.whileServed([NAMESPACE], () => {
+        const disposers = [];
+        disposers.push(ctx.slots.inject("settings.section", () => ctx.slots.register({
+          name: "settings.section",
+          id: SECTION_ID,
+          order: 18,
+          label: () => TITLE
+        }, Page)));
+        disposers.push(ctx.slots.inject("plugins.item", () => ctx.slots.register({
+          name: "plugins.item",
+          id: SECTION_ID,
+          order: 50,
+          label: () => TITLE
+        }, (props) => (props && props.view === "summary"
+          ? React.createElement(Summary, null)
+          : React.createElement(Page, props)))));
+        return () => {
+          for (const dispose of disposers) {
+            try {
+              dispose();
+            } catch {
+              /* 已释放 */
             }
-          };
-        }), "dsh-citrus: config surfaces");
-      });
+          }
+        };
+      }), "dsh-citrus: config surfaces");
     }
 
     exports.apply = apply;
