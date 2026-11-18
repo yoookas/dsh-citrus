@@ -26,7 +26,7 @@ jobs:
 
       - name: 语法检查
         run: |
-          for file in lib/index.js lib/config.js lib/tools.js lib/prompt.js lib/runtime.js lib/render.js lib/store.js lib/core/*.js lib/platforms/zhihu/*.js bin/cli.mjs; do
+          for file in lib/index.js lib/client.js lib/config.js lib/tools.js lib/prompt.js lib/runtime.js lib/render.js lib/store.js lib/core/*.js lib/platforms/zhihu/*.js bin/cli.mjs; do
             node --check "$file"
           done
 

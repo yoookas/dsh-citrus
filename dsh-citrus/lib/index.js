@@ -1,7 +1,11 @@
 /**
  * dsh-citrus 插件入口（Cordis 插件）。
  *
- * 工具注册与提示词段落都是 fiber 作用域的：插件被卸载/重载时自动清理。
+ * 两套配置并存：
+ *   * 组合配置（cordis.patch.yml 的 config）—— 部署默认值；
+ *   * 运行时设置（settings 命名空间 dsh-citrus）—— 用户在面板卡片里改，热生效。
+ *
+ * 工具、运行时、提示词都通过 getConfig() 读取当前值，所以设置一保存就换源。
  */
 
 import { mkdirSync } from 'node:fs';
@@ -16,6 +20,9 @@ export const name = 'dsh-citrus';
 
 /** 依赖的服务：没有工具注册表或系统提示词就不激活。 */
 export const inject = ['tools', 'systemPrompt'];
+
+/** 面板卡片写入的 settings 命名空间。 */
+export const SETTINGS_NAMESPACE = 'dsh-citrus';
 
 export { Config };
 
@@ -39,9 +46,23 @@ export function apply(ctx, config) {
     /* 建不了目录不影响工具，真正写 Cookie 时会再报错 */
   }
 
-  const runtime = new CitrusRuntime(config, log);
+  // 组合配置是底座；settings 服务在时，用户层覆盖它。
+  let current = () => config;
+  const getConfig = () => current() || {};
+
+  ctx.inject(['settings'], (settingsCtx) => {
+    log('settings 服务可用，注册命名空间 ' + SETTINGS_NAMESPACE);
+    settingsCtx.settings.installSection(ctx, SETTINGS_NAMESPACE, Config, config, {
+      setSource: (source) => {
+        current = source;
+      },
+      onChange: () => {}
+    });
+  });
+
+  const runtime = new CitrusRuntime(getConfig, log);
   ctx.effect(() => () => runtime.dispose());
-  registerTools(ctx, config, runtime, defineTool);
-  registerPrompt(ctx, config);
+  registerTools(ctx, getConfig, runtime, defineTool);
+  registerPrompt(ctx, getConfig);
   log('已加载（知乎工具：zhihu_hot / zhihu_search / zhihu_read / zhihu_comments）');
 }

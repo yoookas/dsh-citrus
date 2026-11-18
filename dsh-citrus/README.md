@@ -50,6 +50,20 @@ node scripts/install.mjs --uninstall     # 卸载
 
 ---
 
+## 面板卡片配置
+
+安装并重载插件后，打开 **设置 → 插件 → 插件配置**，会看到「知乎内容（dsh-citrus）」卡片：
+
+- **知乎 Cookie**：密码框，粘贴浏览器复制的 cURL / Cookie；保存后不会回显。清空输入框表示"不修改"。
+- **条数/字数**：热榜、搜索、评论条数，正文/评论/摘要字数上限。
+- **保存设置**：写入 `<DSH_HOME>/settings.yaml` 的 `dsh-citrus:` 段，**下一次工具调用立即生效**，不用重启。
+- **恢复默认**：清掉这些覆盖，回退到组合配置。
+- **清除保存的 Cookie**：删除设置里的 Cookie，回退到本地 Cookie 文件（`dsh-citrus auth` 写的那份）。
+
+> 设置文档默认是 `<DSH_HOME>/settings.yaml`。面板里的 Cookie 也存在这里；如果不想让它进设置文件，继续用 `dsh-citrus auth` 或插件配置里的 `cookieFile`。
+>
+> 装完/更新插件后如果卡片没出现，刷新一次 GUI 页面（Ctrl+R）——浏览器端的模块图是页面加载时注入的。
+
 ## 配置 Cookie
 
 ### 方式 A：命令行（推荐）
@@ -130,7 +144,7 @@ cd dsh-citrus
 # 宿主包解析：本地开发时把 <DSH_HOME>/profiles/node_modules 链接成 node_modules
 # Windows: mklink /J node_modules %USERPROFILE%\.dsh\profiles\node_modules
 
-npm test                       # 28 个离线用例（假知乎，不联网）
+npm test                       # 31 个离线用例（假知乎，不联网）
 node --check lib/index.js      # 语法检查
 ```
 

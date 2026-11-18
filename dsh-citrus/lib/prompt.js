@@ -10,14 +10,14 @@ const HINT = [
   '工具返回的正文已经是纯文本；如果内容被截断，可以再用 zhihu_read 读同一条并调整 content_chars。'
 ].join(' ');
 
-export function registerPrompt(ctx, config) {
-  if (config.promptHint === false) return null;
+export function registerPrompt(ctx, getConfig) {
   return ctx.systemPrompt.section({
     name: 'tool:zhihu',
     order: 3000,
     text: ({ scope }) => {
       const visible = ctx.tools.get('zhihu_hot', scope) !== undefined
         || ctx.tools.get('zhihu_search', scope) !== undefined;
+      const config = typeof getConfig === 'function' ? getConfig() : getConfig;
       return visible && config.promptHint !== false ? HINT : '';
     }
   });

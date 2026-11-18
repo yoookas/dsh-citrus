@@ -1,11 +1,12 @@
 {
   "name": "dsh-citrus",
-  "version": "26.11.02",
+  "version": "26.11.03",
   "description": "知乎热榜 / 问题 / 回答 / 评论采集插件（DeepSeek Harness）",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
+    "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
   "bin": {
@@ -21,7 +22,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test tests/citrus.test.mjs tests/tools.test.mjs",
+    "test": "node --test tests/citrus.test.mjs tests/tools.test.mjs tests/package.test.mjs",
     "check": "node --check lib/index.js"
   },
   "keywords": [
@@ -41,5 +42,13 @@
     "@deepseek-ai/dsh-system-prompt": ">=0.1.0",
     "@deepseek-ai/dsh-tools": ">=0.1.0",
     "@deepseek-ai/schemastery": ">=3.0.0"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings"
+      ],
+      "platform": "web"
+    }
   }
 }

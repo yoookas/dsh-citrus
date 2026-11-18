@@ -86,14 +86,20 @@ async function boot(config) {
   writeCookieFile(cookieFile, "curl 'https://www.zhihu.com/' -H 'cookie: z_c0=demo-token; d_c0=demo'");
   const ctx = fakeContext();
   const resolved = defaultConfig({ cookieFile, ...config });
-  const runtime = new CitrusRuntime(resolved, () => {});
-  registerTools(ctx, resolved, runtime, fakeDefineTool);
-  registerPrompt(ctx, resolved);
+  let live = resolved;
+  const getConfig = () => live;
+  const runtime = new CitrusRuntime(getConfig, () => {});
+  registerTools(ctx, getConfig, runtime, fakeDefineTool);
+  registerPrompt(ctx, getConfig);
   return {
     upstream,
     ctx,
     runtime,
+    configFile: cookieFile,
     dir,
+    setConfig(next) {
+      live = next;
+    },
     async stop() {
       delete process.env.CITRUS_ZHIHU_BASE_URL;
       runtime.dispose();
@@ -134,6 +140,21 @@ test('zhihu_hot：返回结构化条目 + markdown', async () => {
     assert.ok(value.markdown.includes('知乎热榜'));
     assert.ok(value.markdown.includes('https://www.zhihu.com/question/123456'));
     assert.ok(!JSON.stringify(value).includes('demo-token'));
+  } finally {
+    await app.stop();
+  }
+});
+
+test('设置热更新：条数上限下一次调用立即生效', async () => {
+  const app = await boot({ hotLimit: 2 });
+  try {
+    const tool = app.ctx._tools.get('zhihu_hot');
+    const first = await tool.execute({}, exec);
+    assert.equal(first.count, 2);
+
+    app.setConfig(defaultConfig({ cookieFile: app.configFile, hotLimit: 1 }));
+    const second = await tool.execute({}, exec);
+    assert.equal(second.count, 1);
   } finally {
     await app.stop();
   }
@@ -215,7 +236,8 @@ test('提示词段落：工具可见时输出指引，关闭开关时不注册',
 
   const off = await boot({ promptHint: false });
   try {
-    assert.equal(off.ctx._sections.length, 0);
+    assert.equal(off.ctx._sections.length, 1);
+    assert.equal(off.ctx._sections[0].text({ scope: {} }), '');
   } finally {
     await off.stop();
   }

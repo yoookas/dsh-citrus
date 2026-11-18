@@ -15,10 +15,10 @@
  *   node scripts/install.mjs --uninstall     # 移除配置块和插件目录
  */
 
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..');
@@ -39,6 +39,7 @@ const profileDir = join(home, 'profiles', profile);
 const patchFile = join(profileDir, 'cordis.patch.yml');
 const target = join(home, 'plugins', 'dsh-citrus');
 const sharedModules = join(home, 'profiles', 'node_modules');
+const sharedLink = join(sharedModules, 'dsh-citrus');
 
 const START = '# >>> dsh-citrus';
 const END = '# <<< dsh-citrus';
@@ -62,7 +63,7 @@ function patchBlock() {
     START + ' (由 scripts/install.mjs 管理，重装会覆盖这一段)',
     '- insert:',
     '    - id: dsh-citrus',
-    '      name: ' + q(pathToFileURL(join(target, 'lib', 'index.js')).href),
+    '      name: ' + q('dsh-citrus'),
     '      config:',
     '        cookieFile: ' + q(join(home, 'dsh-citrus', 'zhihu.cookie')),
     END
@@ -146,6 +147,34 @@ function linkModules() {
   }
 }
 
+function linkSharedPackage() {
+  const stat = existsSync(sharedLink) ? lstatSync(sharedLink) : null;
+  if (stat !== null && !stat.isSymbolicLink()) {
+    throw new Error(sharedLink + ' 已存在且不是链接，不敢覆盖；请先手动移走它。');
+  }
+  if (stat !== null && stat.isSymbolicLink()) {
+    try {
+      if (resolve(sharedLink) === resolve(target)) {
+        log('profiles/node_modules/dsh-citrus 链接已存在');
+        return;
+      }
+    } catch {
+      /* 坏链接按需要重建 */
+    }
+    if (!dryRun) rmSync(sharedLink, { force: true });
+  }
+  if (dryRun) {
+    log('会创建 profiles/node_modules/dsh-citrus 链接 -> ' + target);
+    return;
+  }
+  try {
+    symlinkSync(target, sharedLink, 'junction');
+    log('已创建 profiles/node_modules/dsh-citrus 链接');
+  } catch (error) {
+    throw new Error('创建 profiles/node_modules/dsh-citrus 链接失败：' + error.message);
+  }
+}
+
 function installFiles() {
   if (!existsSync(SOURCE)) throw new Error('找不到插件源码：' + SOURCE);
   if (existsSync(target)) {
@@ -190,6 +219,10 @@ function main() {
 
   if (uninstall) {
     removePatch();
+    if (existsSync(sharedLink) && lstatSync(sharedLink).isSymbolicLink()) {
+      if (!dryRun) rmSync(sharedLink, { force: true });
+      log('已删除 profiles/node_modules/dsh-citrus 链接');
+    }
     if (existsSync(target)) {
       log('删除插件目录：' + target);
       if (!dryRun) rmSync(target, { recursive: true, force: true });
@@ -203,6 +236,7 @@ function main() {
   }
   installFiles();
   linkModules();
+  linkSharedPackage();
   updatePatch();
   printNextSteps();
 }
