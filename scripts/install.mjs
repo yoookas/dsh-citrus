@@ -3,17 +3,16 @@
  *
  * 做的事：
  *   1. 复制插件到 <DSH_HOME>/plugins/dsh-citrus；
- *   2. 在插件目录里建一个 node_modules 链接，指向 <DSH_HOME>/profiles/node_modules，
+ *   2. 在插件目录建一个 node_modules 链接，指向 profile 自己的 node_modules，
  *      让插件能解析 @deepseek-ai/dsh-tools 这些宿主包；
- *   3. 把它登记成 profile bundle（package.json 里的依赖 + dsh.profile.bundles），
- *      同时清掉旧版 install 脚本留下的 cordis.patch.yml 标记块。
+ *   3. 把它登记成 profile bundle（package.json 里的依赖 + dsh.profile.bundles）。
  *
  * 幂等：重复运行只会更新已有登记，不会重复插入。
  *
  *   node scripts/install.mjs                 # 装进当前 profile（默认 desktop）
  *   node scripts/install.mjs --profile web   # 装进指定 profile
  *   node scripts/install.mjs --dry-run       # 只看会做什么
- *   node scripts/install.mjs --uninstall     # 移除配置块和插件目录
+ *   node scripts/install.mjs --uninstall     # 移除 bundle 登记和插件目录
  */
 
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
@@ -37,51 +36,12 @@ const uninstall = hasFlag('--uninstall');
 const home = resolve(option('--home', process.env.DSH_HOME || join(homedir(), '.dsh')));
 const profile = option('--profile', process.env.DSH_PROFILE || 'desktop');
 const profileDir = join(home, 'profiles', profile);
-const patchFile = join(profileDir, 'cordis.patch.yml');
 const target = join(home, 'plugins', 'dsh-citrus');
-// 宿主包从 profile 的 node_modules 解析；旧版把它放在 <DSH_HOME>/profiles/node_modules。
+// 宿主包从 profile 自己的 node_modules 解析。
 const profileModules = join(profileDir, 'node_modules');
-
-const START = '# >>> dsh-citrus';
-const END = '# <<< dsh-citrus';
 
 function log(message) {
   console.log((dryRun ? '[dry-run] ' : '') + message);
-}
-
-function backupPatch() {
-  if (!existsSync(patchFile)) return '';
-  const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-  const backup = patchFile + '.bak-' + stamp;
-  if (!dryRun) cpSync(patchFile, backup);
-  return backup;
-}
-
-/** 找到标记块的首尾下标；没有返回 null。 */
-function findBlock(text) {
-  const start = text.indexOf(START);
-  if (start < 0) return null;
-  const end = text.indexOf(END, start);
-  if (end < 0) return null;
-  return { start, end: end + END.length };
-}
-
-function removePatch() {
-  if (!existsSync(patchFile)) return;
-  const text = readFileSync(patchFile, 'utf8');
-  const found = findBlock(text);
-  if (!found) {
-    log('cordis.patch.yml 里没有 dsh-citrus 配置块');
-    return;
-  }
-  let before = text.slice(0, found.start);
-  let after = text.slice(found.end);
-  before = before.replace(/\n+$/, '');
-  after = after.replace(/^\n+/, '');
-  const next = (before ? before + '\n' : '') + (after ? after + '\n' : '');
-  const backup = backupPatch();
-  if (!dryRun) writeFileSync(patchFile, next, 'utf8');
-  log('已从 cordis.patch.yml 移除 dsh-citrus 配置块' + (backup ? '（备份：' + backup + '）' : ''));
 }
 
 function linkModules() {
@@ -187,7 +147,6 @@ function main() {
   console.log('');
 
   if (uninstall) {
-    removePatch();
     removeProfileBundle();
     if (existsSync(target)) {
       log('删除插件目录：' + target);
@@ -202,7 +161,6 @@ function main() {
   }
   installFiles();
   linkModules();
-  removePatch();
   ensureProfileBundle();
   printNextSteps();
 }

@@ -52,7 +52,7 @@ node scripts/install.mjs
 
 1. 把插件复制到 `<DSH_HOME>/plugins/dsh-citrus`；
 2. 在插件目录建一个 `node_modules` 链接，指向 `<DSH_HOME>/profiles/<profile>/node_modules`（解析宿主包；找不到就跳过）；
-3. 把它登记成 profile bundle（`package.json` 的依赖 + `dsh.profile.bundles`），并清掉旧脚本留下的配置块。
+3. 把它登记成 profile bundle（`package.json` 的依赖 + `dsh.profile.bundles`）。
 
 可选参数：
 
