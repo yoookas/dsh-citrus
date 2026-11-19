@@ -124,10 +124,13 @@ export function renderItem(item, options = {}) {
     related.forEach((row, index) => {
       const who = (row.author && row.author.name) || '匿名用户';
       const likes = compactNumber(row.stats && row.stats.likes);
-      lines.push((index + 1) + '. ' + who + (likes ? '（' + likes + ' 赞）' : ''));
+      // 带上 answer:<id>：否则追问「这条回答的评论」时没有可用的 ref，只能退回去查问题。
+      const ref = row.id ? '· answer:' + row.id : '';
+      lines.push((index + 1) + '. ' + who + (likes ? '（' + likes + ' 赞）' : '') + (ref ? ' ' + ref : ''));
       const text = multiline(row.content || row.excerpt, options.relatedChars || 600);
       if (text) lines.push(text);
     });
+    lines.push('（要读某条回答的评论，把上面的 answer:<id> 传给 zhihu_comments。）');
   }
   return lines.join('\n');
 }
@@ -140,7 +143,8 @@ export function renderComments(result, options = {}) {
   else head += '（本次 ' + items.length + ' 条）';
   if (!items.length) {
     if (result.errors && result.errors.length) {
-      return head + '：这次没读到评论（' + result.errors.map((row) => row.code).join('、') + '）。';
+      // 把上游的真实原因带出来（签名门槛 / 风控 / 评论关闭），别只给一个错误码。
+      return head + '：' + result.errors.map((row) => row.message || row.code).join('；');
     }
     return head + '：没有评论。';
   }

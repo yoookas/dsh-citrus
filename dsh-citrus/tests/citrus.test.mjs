@@ -179,6 +179,26 @@ test('评论：排序参数会翻译成上游取值', async () => {
   });
 });
 
+test('评论：旧接口给空数组但报了总数时，改走 v5', async () => {
+  await withUpstream(async (upstream) => {
+    // 真实情况：comment_v5 不签名会返回 200 + data: []，但 paging.totals 是对的。
+    upstream.route('/api/v4/answers/111/comments', { data: [], paging: { totals: 1 } });
+    const page = await adapterFor(upstream).comments('answer:111', { limit: 10 });
+    assert.equal(page.count, 1, '空数组不能被当成「这个接口可用」');
+    assert.ok(upstream.calls.some((call) => call.path.includes('comment_v5')));
+  });
+});
+
+test('评论：问题维度读不到正文时给出可行动的错误', async () => {
+  await withUpstream(async (upstream) => {
+    upstream.route('/api/v4/comment_v5/questions/222/root_comment', { data: [], paging: { totals: 18 } });
+    await assert.rejects(
+      adapterFor(upstream).comments('question:222', { limit: 5 }),
+      (error) => /签名/.test(error.message) && /answer:/.test(error.hint)
+    );
+  });
+});
+
 // ---- 错误翻译 --------------------------------------------------------
 
 test('错误：401 -> not_logged_in', async () => {
@@ -227,6 +247,8 @@ test('渲染：热榜/搜索/正文/评论都带链接且不含 cookie', async (
     const item = renderItem(await adapter.item('question:222', { related: true }));
     assert.ok(item.includes('【问题】'));
     assert.ok(item.includes('其他高赞回答'));
+    // 高赞回答要带 answer:<id>，否则追问「这条回答的评论」时没有可用的 ref。
+    assert.ok(/answer:\d+/.test(item), '渲染里应带可引用的 answer id');
 
     const comments = renderComments(await adapter.comments('answer:111', { limit: 5 }));
     assert.ok(comments.includes('评论'));

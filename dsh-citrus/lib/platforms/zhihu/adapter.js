@@ -353,6 +353,8 @@ export class ZhihuAdapter {
     const order = kind === 'answer' ? ['legacy', 'v5'] : ['v5', 'legacy'];
     let total = null;
     let lastError = null;
+    // 「200 但没内容」比 404 更有信息量，收尾时要优先报它。
+    let emptyButTotal = null;
     let answered = false;
     let chosen = null;
     const items = [];
@@ -364,6 +366,7 @@ export class ZhihuAdapter {
       pages += 1;
       const want = count - items.length;
       let payload = null;
+      let chunk = [];
       const variants = chosen ? [chosen] : order;
       for (const variant of variants) {
         try {
@@ -371,11 +374,28 @@ export class ZhihuAdapter {
             ? endpoints.commentsLegacy(kind, resourceId, want, cursor, sort)
             : endpoints.commentsV5(kind, resourceId, want, cursor, sort);
           const result = await this.get(spec, signal);
-          if (result && typeof result === 'object') {
-            chosen = variant;
-            payload = result;
-            break;
+          if (!result || typeof result !== 'object') continue;
+          const reported = upstreamTotal(result);
+          if (reported !== null) total = reported;
+          const candidate = normalize.normalizeComments(result, resourceId);
+          // 200 但一条都没给、上游又说有评论：这个接口对我们不可用
+          //（comment_v5 需要 x-zse 签名，不签名就是空数组），换下一个接口。
+          if (!candidate.length && reported) {
+            emptyButTotal = new CitrusError(
+              'comments_unavailable',
+              '上游返回了评论数（' + reported + '）却没给正文：这个评论接口要浏览器签名。',
+              kind === 'question'
+                ? '问题本身读不到评论；要看评论请指定某条回答，传 answer:<id>（zhihu_read 的输出里带这个 id）。'
+                : '换 sort=hot / sort=new 再试，或稍后用 answer:<id> 指定具体回答。',
+              { platform: PLATFORM }
+            );
+            lastError = emptyButTotal;
+            continue;
           }
+          chosen = variant;
+          payload = result;
+          chunk = candidate;
+          break;
         } catch (error) {
           lastError = error;
         }
@@ -385,7 +405,6 @@ export class ZhihuAdapter {
       answered = true;
       const found = upstreamTotal(payload);
       if (found !== null) total = found;
-      const chunk = normalize.normalizeComments(payload, resourceId);
       const fresh = chunk.filter((row) => row.id && !seen.has(row.id));
       for (const row of fresh) {
         seen.add(row.id);
@@ -398,15 +417,20 @@ export class ZhihuAdapter {
       if (total !== null && cursor >= total) break;
     }
 
-    if (!answered && lastError) throw lastError;
+    // 有「200 但空」的诊断就报它：比上游 404 更能说明该怎么做。
+    if (!answered && (emptyButTotal || lastError)) throw emptyButTotal || lastError;
 
     const rows = items.slice(0, count);
     const errors = [];
     if (!rows.length && total) {
+      // 拿到总数、拿不到正文，基本就是 comment_v5 的签名门槛；问题维度没有 legacy 可退。
       errors.push({
         source: 'comments',
         code: 'comments_unavailable',
-        message: '上游说有 ' + total + ' 条评论，但两个评论接口都没返回内容（多半被风控或评论已关闭）。'
+        message: kind === 'question'
+          ? '问题自身有 ' + total + ' 条评论，但知乎的评论接口需要浏览器签名，插件读不到正文；' +
+            '想看评论请指定某条回答：传 answer:<id>（zhihu_read 的输出里带这个 id）。'
+          : '上游说有 ' + total + ' 条评论，但两个评论接口都没返回内容（多半被风控或评论已关闭）。'
       });
     }
     return makePage(rows, {
