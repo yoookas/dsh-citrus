@@ -65,18 +65,6 @@ export const SAMPLE = {
     created: 1699990000
   },
   questionAnswers: { data: [ANSWER(111, 222), ANSWER(444, 222)] },
-  commentsV5: {
-    data: [{
-      id: '9001',
-      content: '<p>说得好。</p>',
-      author: { name: '李四', url_token: 'lisi' },
-      like_count: 12,
-      child_comment_count: 2,
-      created_time: 1700000000
-    }],
-    counts: { total_counts: 1 },
-    paging: { is_end: true }
-  },
   commentsLegacy: {
     data: [{
       id: 9001,
@@ -125,7 +113,6 @@ export class MockUpstream {
     this.route('/api/v4/answers/111', SAMPLE.answer);
     this.route('/api/v4/questions/222', SAMPLE.question);
     this.route('/api/v4/questions/222/answers', SAMPLE.questionAnswers);
-    this.route('/api/v4/comment_v5/answers/111/root_comment', SAMPLE.commentsV5);
     this.route('/api/v4/answers/111/comments', SAMPLE.commentsLegacy);
     this.route('/api/v4/articles/333', {
       type: 'article', id: 333, title: '一篇文章',

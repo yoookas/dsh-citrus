@@ -84,29 +84,19 @@ export const COMMENT_NOUNS = {
   zvideo: 'zvideos'
 };
 
-export const COMMENT_PAGE_CAPS = { v5: 10, legacy: 20 };
+/** 旧版评论接口每页上限。 */
+export const COMMENT_PAGE_LIMIT = 20;
 export const SEARCH_PAGE_CAP = 20;
 
-export const COMMENT_ORDERS = {
-  v5: { hot: 'score', new: 'ts' },
-  legacy: { hot: 'normal', new: 'score' }
-};
+/** 排序参数 -> 上游取值（热度用 normal，时间用 score）。 */
+export const COMMENT_ORDERS = { hot: 'normal', new: 'score' };
 
-export function commentsV5(kind, resourceId, limit, offset, sort = 'hot') {
-  const noun = COMMENT_NOUNS[kind] || 'answers';
-  return ['/api/v4/comment_v5/' + noun + '/' + quote(resourceId) + '/root_comment', {
-    order_by: COMMENT_ORDERS.v5[sort] || 'score',
-    limit: Math.max(1, Math.min(Number(limit) || 20, COMMENT_PAGE_CAPS.v5)),
-    offset
-  }];
-}
-
-export function commentsLegacy(kind, resourceId, limit, offset, sort = 'hot') {
+export function comments(kind, resourceId, limit, offset, sort = 'hot') {
   const noun = COMMENT_NOUNS[kind] || 'answers';
   return ['/api/v4/' + noun + '/' + quote(resourceId) + '/comments', {
     include: COMMENT_INCLUDE,
-    limit: Math.max(1, Math.min(Number(limit) || 20, COMMENT_PAGE_CAPS.legacy)),
+    limit: Math.max(1, Math.min(Number(limit) || 20, COMMENT_PAGE_LIMIT)),
     offset,
-    order: COMMENT_ORDERS.legacy[sort] || 'normal'
+    order: COMMENT_ORDERS[sort] || 'normal'
   }];
 }

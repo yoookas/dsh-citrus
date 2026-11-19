@@ -207,7 +207,7 @@ cd dsh-citrus
 # 宿主包解析：本地开发时把 <DSH_HOME>/profiles/<profile>/node_modules 链接成 node_modules
 # Windows: mklink /J node_modules %USERPROFILE%\.dsh\profiles\desktop\node_modules
 
-npm test                       # 43 个离线用例（假知乎 + 假 React，不联网）
+npm test                       # 45 个离线用例（假知乎 + 假 React，不联网）
 node --check lib/index.js      # 语法检查
 node --check lib/client.js
 ```

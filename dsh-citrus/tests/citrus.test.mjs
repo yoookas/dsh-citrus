@@ -162,15 +162,6 @@ test('评论：回答优先走旧接口，拿得到内容', async () => {
   });
 });
 
-test('评论：v5 接口兜底（旧接口 404）', async () => {
-  await withUpstream(async (upstream) => {
-    upstream.route('/api/v4/answers/111/comments', { error: 'nope' }, 404);
-    const page = await adapterFor(upstream).comments('answer:111', { limit: 10 });
-    assert.equal(page.count, 1);
-    assert.ok(upstream.calls.some((call) => call.path.includes('comment_v5')));
-  });
-});
-
 test('评论：排序参数会翻译成上游取值', async () => {
   await withUpstream(async (upstream) => {
     await adapterFor(upstream).comments('answer:111', { limit: 10, sort: 'new' });
@@ -179,13 +170,13 @@ test('评论：排序参数会翻译成上游取值', async () => {
   });
 });
 
-test('评论：旧接口给空数组但报了总数时，改走 v5', async () => {
+test('评论：上游只报总数不给正文时，把原因写清楚', async () => {
   await withUpstream(async (upstream) => {
-    // 真实情况：comment_v5 不签名会返回 200 + data: []，但 paging.totals 是对的。
     upstream.route('/api/v4/answers/111/comments', { data: [], paging: { totals: 1 } });
     const page = await adapterFor(upstream).comments('answer:111', { limit: 10 });
-    assert.equal(page.count, 1, '空数组不能被当成「这个接口可用」');
-    assert.ok(upstream.calls.some((call) => call.path.includes('comment_v5')));
+    assert.equal(page.count, 0);
+    assert.equal(page.total, 1);
+    assert.match(page.errors[0].message, /没返回正文/);
   });
 });
 
@@ -214,13 +205,13 @@ test('评论：翻页不受「这一页不满」影响，直到上游 is_end', a
   });
 });
 
-test('评论：问题维度读不到正文时给出可行动的错误', async () => {
+test('评论：非回答类内容读不到正文时，说明原因并指向 answer:<id>', async () => {
   await withUpstream(async (upstream) => {
-    upstream.route('/api/v4/comment_v5/questions/222/root_comment', { data: [], paging: { totals: 18 } });
-    await assert.rejects(
-      adapterFor(upstream).comments('question:222', { limit: 5 }),
-      (error) => /签名/.test(error.message) && /answer:/.test(error.hint)
-    );
+    upstream.route('/api/v4/questions/222/comments', { data: [], paging: { totals: 18 } });
+    const page = await adapterFor(upstream).comments('question:222', { limit: 5 });
+    assert.equal(page.count, 0);
+    assert.match(page.errors[0].message, /签名/);
+    assert.match(page.errors[0].message, /answer:/);
   });
 });
 

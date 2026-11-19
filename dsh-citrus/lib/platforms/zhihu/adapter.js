@@ -350,14 +350,7 @@ export class ZhihuAdapter {
   }
 
   async loadComments(kind, resourceId, count, offset, page, sort, signal) {
-    const order = kind === 'answer' ? ['legacy', 'v5'] : ['v5', 'legacy'];
     let total = null;
-    let lastError = null;
-    // 「200 但没内容」比 404 更有信息量，收尾时要优先报它。
-    let emptyButTotal = null;
-    let answered = false;
-    let chosen = null;
-    // 上游明确说过 is_end：之后不会再有内容了。
     let exhausted = false;
     const items = [];
     const seen = new Set();
@@ -366,80 +359,36 @@ export class ZhihuAdapter {
 
     while (items.length < count && pages < COMMENT_PAGE_BUDGET) {
       pages += 1;
-      const want = count - items.length;
-      let payload = null;
-      let chunk = [];
-      const variants = chosen ? [chosen] : order;
-      for (const variant of variants) {
-        try {
-          const spec = variant === 'legacy'
-            ? endpoints.commentsLegacy(kind, resourceId, want, cursor, sort)
-            : endpoints.commentsV5(kind, resourceId, want, cursor, sort);
-          const result = await this.get(spec, signal);
-          if (!result || typeof result !== 'object') continue;
-          const reported = upstreamTotal(result);
-          if (reported !== null) total = reported;
-          const candidate = normalize.normalizeComments(result, resourceId);
-          // 200 但一条都没给、上游又说有评论：这个接口对我们不可用
-          //（comment_v5 需要 x-zse 签名，不签名就是空数组），换下一个接口。
-          if (!candidate.length && reported) {
-            emptyButTotal = new CitrusError(
-              'comments_unavailable',
-              '上游返回了评论数（' + reported + '）却没给正文：这个评论接口要浏览器签名。',
-              kind === 'question'
-                ? '问题本身读不到评论；要看评论请指定某条回答，传 answer:<id>（zhihu_read 的输出里带这个 id）。'
-                : '换 sort=hot / sort=new 再试，或稍后用 answer:<id> 指定具体回答。',
-              { platform: PLATFORM }
-            );
-            lastError = emptyButTotal;
-            continue;
-          }
-          chosen = variant;
-          payload = result;
-          chunk = candidate;
-          break;
-        } catch (error) {
-          lastError = error;
-        }
-      }
-      if (!payload) break;
+      const step = Math.min(count - items.length, endpoints.COMMENT_PAGE_LIMIT);
+      // 只有这一个接口可用：comment_v5 需要浏览器签名，任何内容类型都只回空数组。
+      const payload = await this.get(endpoints.comments(kind, resourceId, step, cursor, sort), signal);
+      const reported = upstreamTotal(payload);
+      if (reported !== null) total = reported;
 
-      answered = true;
-      const found = upstreamTotal(payload);
-      if (found !== null) total = found;
-      const fresh = chunk.filter((row) => row.id && !seen.has(row.id));
-      for (const row of fresh) {
+      for (const row of normalize.normalizeComments(payload, resourceId)) {
+        if (!row.id || seen.has(row.id)) continue;
         seen.add(row.id);
         items.push(row);
       }
 
-      // 一页不满 limit 不代表到头：知乎会折叠/删除部分评论，
-      // 上游只回 19 条时后面往往还有几十条。只有 is_end 才算完。
-      // 游标按「请求的页大小」前进：被折叠的条目在上游的 offset 空间里仍占位，
-      // 按返回行数推进会跳过中间的条目（也会让重复行把游标带偏）。
-      const returned = Array.isArray(payload.data) ? payload.data.length : chunk.length;
-      const cap = endpoints.COMMENT_PAGE_CAPS[chosen || 'legacy'] || 20;
-      const step = Math.min(want, cap);
-      const isEnd = Boolean(payload.paging && payload.paging.is_end);
+      // 一页不满 limit 不代表到头：知乎会折叠/删除部分评论，上游只回 19 条时后面往往还有。
+      // 游标按请求的页大小前进——被折叠的条目在上游的 offset 空间里仍占位。
+      const returned = Array.isArray(payload && payload.data) ? payload.data.length : 0;
+      const isEnd = Boolean(payload && payload.paging && payload.paging.is_end);
       if (isEnd) exhausted = true;
       if (isEnd || returned === 0) break;
       cursor += step;
     }
 
-    // 有「200 但空」的诊断就报它：比上游 404 更能说明该怎么做。
-    if (!answered && (emptyButTotal || lastError)) throw emptyButTotal || lastError;
-
     const rows = items.slice(0, count);
     const errors = [];
     if (!rows.length && total) {
-      // 拿到总数、拿不到正文，基本就是 comment_v5 的签名门槛；问题维度没有 legacy 可退。
       errors.push({
         source: 'comments',
         code: 'comments_unavailable',
-        message: kind === 'question'
-          ? '问题自身有 ' + total + ' 条评论，但知乎的评论接口需要浏览器签名，插件读不到正文；' +
-            '想看评论请指定某条回答：传 answer:<id>（zhihu_read 的输出里带这个 id）。'
-          : '上游说有 ' + total + ' 条评论，但两个评论接口都没返回内容（多半被风控或评论已关闭）。'
+        message: kind === 'answer'
+          ? '上游说有 ' + total + ' 条评论，但接口没返回正文（多半被风控或评论已关闭）。'
+          : '这类内容的评论接口知乎要求浏览器签名，插件读不到正文；回复某条回答请用 answer:<id>。'
       });
     }
     return makePage(rows, {
