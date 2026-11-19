@@ -26,6 +26,22 @@
 
 ## 安装
 
+### 方式一：从 Release 装（推荐）
+
+打开 [Releases](https://github.com/yoookas/dsh-citrus/releases)，复制最新那个
+`dsh-citrus-<版本>.tgz` 的链接，粘到 DSH 的「插件 → 安装插件」：
+
+```
+https://github.com/yoookas/dsh-citrus/releases/download/v26.11.20/dsh-citrus-26.11.20.tgz
+```
+
+`.tgz` 也可以先下载到本地，再贴绝对路径安装。
+
+> 直接贴仓库地址（`https://github.com/yoookas/dsh-citrus`）是装不了的：
+> 本仓库的 `package.json` 在 `dsh-citrus/` 子目录里，而 pnpm 只认仓库根。
+
+### 方式二：从源码装（开发用）
+
 在仓库根目录运行：
 
 ```bash
