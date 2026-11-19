@@ -6,23 +6,22 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 
 import { MockUpstream } from './mock-upstream.mjs';
-import { defaultCookieFile, writeCookieFile } from '../lib/store.js';
 import { platformConfig, resolveConfig } from '../lib/platforms/registry.js';
 import { CitrusRuntime } from '../lib/runtime.js';
 import { registerTools } from '../lib/tools.js';
 import { registerPrompt } from '../lib/prompt.js';
+
+/** 演示用 Cookie：只有面板一个来源，所以测试直接把它放进配置。 */
+const DEMO_COOKIE = "curl 'https://www.zhihu.com/' -H 'cookie: z_c0=demo-token; d_c0=demo'";
 
 function defaultConfig(overrides = {}) {
   // 配置按平台分组：overrides 直接并进知乎那一段，调用点不用关心层级。
   return {
     platforms: {
       zhihu: {
-        cookie: '',
+        cookie: DEMO_COOKIE,
         hotLimit: 10,
         searchLimit: 8,
         commentLimit: 20,
@@ -105,13 +104,8 @@ async function boot(config) {
   const upstream = new MockUpstream().installDefaults();
   await upstream.start();
   process.env.CITRUS_ZHIHU_BASE_URL = upstream.url;
-  const dir = mkdtempSync(join(tmpdir(), 'dsh-citrus-tools-'));
-  // Cookie 现在固定从 <DSH_HOME>/dsh-citrus/<platform>.cookie 读，所以这里把 DSH_HOME 指到临时目录。
-  const previousHome = process.env.DSH_HOME;
-  process.env.DSH_HOME = dir;
-  const cookieFile = defaultCookieFile('zhihu');
-  writeCookieFile(cookieFile, "curl 'https://www.zhihu.com/' -H 'cookie: z_c0=demo-token; d_c0=demo'");
   const ctx = fakeContext();
+  // Cookie 只有面板一个来源，于是直接放进配置里——和插件真实读到的形状一致。
   const resolved = defaultConfig(config);
   let live = resolved;
   const getConfig = () => live;
@@ -122,15 +116,11 @@ async function boot(config) {
     upstream,
     ctx,
     runtime,
-    configFile: cookieFile,
-    dir,
     setConfig(next) {
       live = next;
     },
     async stop() {
       delete process.env.CITRUS_ZHIHU_BASE_URL;
-      if (previousHome === undefined) delete process.env.DSH_HOME;
-      else process.env.DSH_HOME = previousHome;
       runtime.dispose();
       ctx._effects.forEach((dispose) => {
         try {
@@ -140,7 +130,6 @@ async function boot(config) {
         }
       });
       await upstream.stop();
-      rmSync(dir, { recursive: true, force: true });
     }
   };
 }
@@ -228,13 +217,11 @@ test('zhihu_comments：评论列表', async () => {
 });
 
 test('没配 Cookie 时给出可行动的错误', async () => {
-  const app = await boot({});
+  const app = await boot({ cookie: '' });
   try {
-    // 把 boot 写好的那份删掉，模拟「什么都没配」。
-    rmSync(app.configFile, { force: true });
     await assert.rejects(
       app.ctx._tools.get('zhihu_hot').execute({ limit: 1 }, exec),
-      /dsh-citrus auth/
+      /设置 → citrus/
     );
   } finally {
     await app.stop();

@@ -87,49 +87,26 @@ node scripts/install.mjs --uninstall     # 卸载
   6 个条数/字数、附带高赞回答数、提示词开关、请求间隔/抖动/超时/重试次数。
 - **保存设置**：写进**当前 profile 的 Cordis patch**（也就是这个 bundle 那一行的 `config`），**下一次工具调用立即生效**，不用重启。
 - **恢复默认**：清掉这些用户覆盖，回退到组合配置里的值（包括 schema 默认值）。
-- **清除「知乎」Cookie**：只清当前页签这个平台的 Cookie，回退到本地 Cookie 文件（`dsh-citrus auth` 写的那份）。
+- **清除「知乎」Cookie**：只清当前页签这个平台的 Cookie。
 
 > 设置不是写进 `<DSH_HOME>/settings.yaml`：DSH 0.2 起，表单改动通过 config-editor 落盘到
 > profile 的 Cordis patch。`settings.yaml` 只在旧版本迁移时被读一次。
-> 面板里的 Cookie 也会跟着进这份 patch；不想让它落盘就用 `dsh-citrus auth` 写本地文件。
+> 面板里的 Cookie 也会跟着进这份 patch（明文，仅本机）。
 >
 > 装完/更新插件后如果入口没出现，刷新一次 GUI 页面（Ctrl+R）——浏览器端模块图是页面加载时注入的。
 
 ## 配置 Cookie
 
-### 方式 A：命令行（推荐）
+Cookie **只有一个来源：面板**。
 
-```bash
-node <DSH_HOME>/plugins/dsh-citrus/bin/cli.mjs auth
-```
+1. 浏览器打开 zhihu.com 并登录，`F12 → Network →` 右键任意知乎请求 `→ Copy → Copy as cURL`；
+2. 打开「设置 → citrus」，把整段粘进 **知乎 Cookie** 框，点「保存设置」。
 
-把浏览器里 `F12 -> Network -> 右键任意知乎请求 -> Copy -> Copy as cURL` 的内容粘进去，
-按 `Ctrl+Z` 回车（Linux/macOS 是 `Ctrl+D`）。四种格式都认：cURL 整段、请求头块、裸 Cookie 串、JSON。
+四种格式都认：cURL 整段、请求头块、裸 Cookie 串、JSON。保存后密码框不会回显原值，
+留空保存表示「不修改」，要清空点「清除「知乎」Cookie」。
 
-检查：
-
-```bash
-node <DSH_HOME>/plugins/dsh-citrus/bin/cli.mjs status
-```
-
-会显示 Cookie 指纹（**不显示原文**）、登录态、上游账号和热榜连通性。
-
-### 方式 B：插件配置
-
-在 `cordis.patch.yml` 的 `dsh-citrus` 条目里填：
-
-```yaml
-- insert:
-    - id: dsh-citrus
-      name: 'file:///.../plugins/dsh-citrus/lib/index.js'
-      config:
-        platforms:
-          zhihu:
-            cookie: '把 cURL 粘在这里'
-```
-
-也可以留空 `cookie`，改由 `dsh-citrus auth` 写 `<DSH_HOME>/dsh-citrus/zhihu.cookie`；
-换号后下一次工具调用立即生效，不用重启。
+> 早期版本还有一个 `dsh-citrus auth` 命令把 Cookie 写进 `<DSH_HOME>/dsh-citrus/zhihu.cookie`。
+> 两套来源会让「面板改了却没生效」很难排查，已经移除；旧文件不再被读取，可以直接删掉。
 
 ---
 
@@ -139,7 +116,7 @@ node <DSH_HOME>/plugins/dsh-citrus/bin/cli.mjs status
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
-| `platforms.zhihu.cookie` | 空 | 直接粘贴 cURL（secret 角色，配置界面会遮罩）；留空则读 `<DSH_HOME>/dsh-citrus/zhihu.cookie` |
+| `platforms.zhihu.cookie` | 空 | 粘贴 cURL（secret 角色，界面会遮罩）；唯一的登录态来源 |
 | `platforms.zhihu.hotLimit` | 10 | 热榜默认条数（1-30） |
 | `platforms.zhihu.searchLimit` | 8 | 搜索默认条数（1-20） |
 | `platforms.zhihu.commentLimit` | 20 | 评论默认条数（1-100） |
@@ -174,7 +151,7 @@ tab、控件、写回语义都由 `PLATFORMS` 决定，不用再写 UI 代码。
 |---|---|
 | 想读「某条回答」的评论 | `zhihu_read` 的输出里，每条高赞回答后面带 `answer:<id>`，把它传给 `zhihu_comments` |
 | 读「问题本身」的评论始终为空 | 知乎问题评论接口要浏览器签名，插件拿不到；改读该问题下某条回答的评论 |
-| 还没有配置知乎 Cookie | 跑 `cli.mjs auth` 粘贴 cURL |
+| 还没有配置知乎 Cookie | 打开「设置 → citrus」，把 cURL 粘进 Cookie 框并保存 |
 | Cookie 里的登录态失效了 | 浏览器重新登录知乎，重新复制一次 |
 | 被知乎风控拦住了（验证页） | 去浏览器过一次验证，等几分钟；**不要连续重试** |
 | 知乎限流了 | 等几分钟；把 `gapMs` 调大 |
@@ -234,12 +211,11 @@ dsh-citrus/
 │   ├── prompt.js                # 系统提示词段落
 │   ├── runtime.js               # Cookie -> 适配器
 │   ├── render.js                # 统一模型 -> 文本
-│   ├── store.js                 # Cookie 文件读写
+│   ├── store.js                 # Cookie 解析（唯一来源：面板配置）+ 数据目录
 │   ├── core/                    # 错误、Cookie 解析、HTML、限速 HTTP、模型、缓存
 │   └── platforms/
 │       ├── registry.js          # 平台清单 + platformConfig()（不依赖宿主包）
 │       └── zhihu/               # 接口地址、字段归一化、适配器
-├── bin/cli.mjs                  # auth / status / hot / logout
 └── tests/                       # node:test
 ```
 

@@ -1,19 +1,15 @@
 /**
- * Cookie 存放位置。
+ * Cookie 的唯一来源：插件配置里的 `platforms.<平台>.cookie`。
  *
- * 优先级：
- *   1. 插件配置里的 cookie（直接粘贴 cURL）；
- *   2. 默认文件 <DSH_HOME>/dsh-citrus/<platform>.cookie（由 dsh-citrus auth 写入）。
- *
- * 文件按 mtime 缓存：dsh-citrus auth 换号后，下一次工具调用就会用新的，
- * 不需要重启 DeepSeek Harness。
+ * 只有面板会写它（存进当前 profile 的 Cordis patch），插件不再读本地文件——
+ * 两套来源曾经让「面板改了却没生效」这种问题很难查。
+ * 这里顺带给出插件自己的数据目录（诊断快照等）。
  */
 
-import { mkdirSync, readFileSync, statSync, writeFileSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { CitrusError } from './core/errors.js';
-import { maskCookie, parseCookieInput } from './core/cookies.js';
+import { parseCookieInput } from './core/cookies.js';
 
 export const AUTH_COOKIE_NAMES = ['z_c0'];
 
@@ -25,76 +21,21 @@ export function dataDir() {
   return join(dshHome(), 'dsh-citrus');
 }
 
-export function defaultCookieFile(platform = 'zhihu') {
-  return join(dataDir(), platform + '.cookie');
-}
-
-const fileCache = new Map();
-
-/** 读文件 Cookie；文件不存在返回空串。 */
-export function readCookieFile(path) {
-  if (!path) return '';
-  try {
-    const stat = statSync(path, { bigint: true });
-    const stamp = String(stat.mtimeNs) + ':' + String(stat.size);
-    const cached = fileCache.get(path);
-    if (cached && cached.stamp === stamp) return cached.value;
-    const value = readFileSync(path, 'utf8').replace(/^\uFEFF/, '').trim();
-    fileCache.set(path, { stamp, value });
-    return value;
-  } catch {
-    fileCache.delete(path);
-    return '';
-  }
-}
-
-/** 写 Cookie 文件（权限尽量 0600）；返回实际路径。 */
-export function writeCookieFile(path, cookie) {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, cookie.trim() + '\n', { encoding: 'utf8', mode: 0o600 });
-  try {
-    const stat = statSync(path, { bigint: true });
-    fileCache.set(path, { stamp: String(stat.mtimeNs) + ':' + String(stat.size), value: cookie.trim() });
-  } catch {
-    fileCache.delete(path);
-  }
-  return path;
-}
-
-export function removeCookieFile(path) {
-  try {
-    unlinkSync(path);
-  } catch {
-    /* 不存在就算了 */
-  }
-  fileCache.delete(path);
-}
-
 /**
  * 解析出当前生效的 Cookie。
- *
- * 两个来源：配置里的 cookie 优先，否则读 <DSH_HOME>/dsh-citrus/<platform>.cookie
- * （dsh-citrus auth 写的那份）。配置里不再暴露文件路径，路径是固定的。
- * @param {{ cookie?: string }} config
- * @param {string} [platform]
+ * @param {{ cookie?: string }} config 该平台的配置段
+ * @param {string} [platform] 平台 id
+ * @returns {object} 解析结果（含指纹、登录态，不含原文）
  */
 export function resolveCookie(config = {}, platform = 'zhihu') {
-  const direct = String(config.cookie || '').trim();
-  const path = defaultCookieFile(platform);
-  const raw = direct || readCookieFile(path);
+  const raw = String(config.cookie || '').trim();
   if (!raw) {
     throw new CitrusError(
       'no_credential',
       '还没有配置知乎 Cookie。',
-      '在面板里粘贴 cURL，或运行 dsh-citrus auth 写入本地文件。',
+      '在「设置 → citrus」里粘贴浏览器复制的 cURL；留空保存表示不修改。',
       { platform }
     );
   }
-  const parsed = parseCookieInput(raw, { authCookieNames: AUTH_COOKIE_NAMES, platform });
-  return {
-    ...parsed,
-    sourcePath: direct ? '' : path
-  };
+  return parseCookieInput(raw, { authCookieNames: AUTH_COOKIE_NAMES, platform });
 }
-
-export { maskCookie };

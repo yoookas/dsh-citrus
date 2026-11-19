@@ -59,8 +59,8 @@ const MESSAGES = {
 };
 
 const NEXT_STEPS = {
-  no_credential: '运行 dsh-citrus auth 粘贴浏览器复制的 cURL，或在插件配置里填 cookie。',
-  not_logged_in: '在浏览器重新登录知乎，再 Copy as cURL 复制一份，然后重新运行 dsh-citrus auth。',
+  no_credential: '打开「设置 → citrus」，把浏览器里 Copy as cURL 的内容粘进 Cookie 框并保存。',
+  not_logged_in: '在浏览器重新登录知乎，再 Copy as cURL 复制一份，粘回「设置 → citrus」并保存。',
   challenge: '去浏览器正常打开 zhihu.com 通过验证，等几分钟再试；不要连续重试。',
   rate_limited: '等几分钟再问；citrus 已经自动重试过，连续重试只会更容易被风控。',
   network: '检查这台机器能不能访问 www.zhihu.com（代理 / DNS / 防火墙）。'

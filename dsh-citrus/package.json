@@ -11,12 +11,8 @@
     },
     "./package.json": "./package.json"
   },
-  "bin": {
-    "dsh-citrus": "bin/cli.mjs"
-  },
   "files": [
     "lib",
-    "bin",
     "locale",
     "cordis.patch.yml",
     "README.md",

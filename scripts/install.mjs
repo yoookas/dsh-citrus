@@ -128,17 +128,13 @@ function installFiles() {
 }
 
 function printNextSteps() {
-  const cli = join(target, 'bin', 'cli.mjs');
   console.log('');
   console.log('下一步：');
-  console.log('  1. 配置 Cookie：');
-  console.log('       node "' + cli + '" auth');
-  console.log('     （把浏览器里 Copy as cURL 的内容粘进去，Ctrl+Z 回车）');
-  console.log('  2. 检查：');
-  console.log('       node "' + cli + '" status');
-  console.log('  3. 在 DeepSeek Harness 里直接问：「知乎热榜有什么」');
+  console.log('  1. 重启一次 DeepSeek Harness（宿主侧的模块缓存不会自动重载）');
+  console.log('  2. 打开「设置 → citrus」，把浏览器里 Copy as cURL 的内容粘进 Cookie 框并保存');
+  console.log('  3. 在对话里直接问：「知乎热榜有什么」');
   console.log('');
-  console.log('如果 GUI 里还没看到工具，重启一次 DeepSeek Harness（profile 的 patch 热重载有时不触发）。');
+  console.log('排查：让模型跑一次 zhihu_status，或看 <DSH_HOME>/dsh-citrus/status.json。');
 }
 
 function main() {

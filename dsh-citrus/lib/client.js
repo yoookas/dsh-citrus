@@ -51,7 +51,7 @@ window.__ModuleLoader__.load({
             key: "cookie",
             label: "知乎 Cookie",
             placeholder: "粘贴新的 cURL / Cookie（留空表示不修改）",
-            hint: "浏览器里 F12 -> Network -> 右键任意知乎请求 -> Copy as cURL，把整段粘进来。面板保存的 Cookie 优先于 dsh-citrus auth 写进本地文件的那份；清除后回退到文件。"
+            hint: "浏览器里 F12 -> Network -> 右键任意知乎请求 -> Copy as cURL，把整段粘进来即可。这里保存的 Cookie 存在当前 profile 的配置里；留空保存表示不修改，要清空请用下面的「清除」。"
           },
           { kind: "number", key: "hotLimit", label: "热榜条数", hint: "1-30；知乎热榜不给翻页，30 就是上限。", min: 1, max: 30 },
           { kind: "number", key: "searchLimit", label: "搜索条数", hint: "1-20。", min: 1, max: 20 },

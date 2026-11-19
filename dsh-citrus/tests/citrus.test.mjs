@@ -6,9 +6,6 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 
 import { MockUpstream } from './mock-upstream.mjs';
 import { parseCookieInput, maskCookie } from '../lib/core/cookies.js';
@@ -16,7 +13,7 @@ import { htmlToText } from '../lib/core/html.js';
 import { CitrusError, friendlyMessage } from '../lib/core/errors.js';
 import { ZhihuAdapter } from '../lib/platforms/zhihu/adapter.js';
 import { renderComments, renderHot, renderItem, renderSearch } from '../lib/render.js';
-import { defaultCookieFile, resolveCookie, writeCookieFile } from '../lib/store.js';
+import { resolveCookie } from '../lib/store.js';
 
 const CURL = "curl 'https://www.zhihu.com/api/v4/me' -H 'cookie: z_c0=demo-token; d_c0=demo' -H 'user-agent: TestAgent/1.0'";
 
@@ -272,42 +269,20 @@ test('渲染：热榜/搜索/正文/评论都带链接且不含 cookie', async (
   });
 });
 
-// ---- Cookie 文件 -----------------------------------------------------
+// ---- Cookie 只有一个来源：配置里的 platforms.<平台>.cookie ------------------
 
-test('Cookie 文件：默认路径写入后能被解析，改文件后立即生效', () => {
-  const home = mkdtempSync(join(tmpdir(), 'dsh-citrus-home-'));
-  const previous = process.env.DSH_HOME;
-  process.env.DSH_HOME = home;
-  try {
-    const path = defaultCookieFile('zhihu');
-    writeCookieFile(path, CURL);
-    const resolved = resolveCookie({});
-    assert.equal(resolved.hasLogin, true);
-    assert.equal(resolved.cookie, 'z_c0=demo-token; d_c0=demo');
-    assert.ok(!resolved.fingerprint.includes('demo-token'));
-
-    writeFileSync(path, 'z_c0=second; d_c0=x', 'utf8');
-    const again = resolveCookie({});
-    assert.equal(again.cookie, 'z_c0=second; d_c0=x');
-  } finally {
-    if (previous === undefined) delete process.env.DSH_HOME;
-    else process.env.DSH_HOME = previous;
-    rmSync(home, { recursive: true, force: true });
-  }
+test('Cookie：从配置里解析，带登录态且指纹不泄漏原文', () => {
+  const resolved = resolveCookie({ cookie: CURL });
+  assert.equal(resolved.hasLogin, true);
+  assert.equal(resolved.cookie, 'z_c0=demo-token; d_c0=demo');
+  assert.ok(!resolved.fingerprint.includes('demo-token'));
 });
 
-test('Cookie 文件：缺失时给出 no_credential', () => {
-  const home = mkdtempSync(join(tmpdir(), 'dsh-citrus-home-'));
-  const previous = process.env.DSH_HOME;
-  process.env.DSH_HOME = home;
-  try {
+test('Cookie：配置里为空时给出 no_credential', () => {
+  for (const config of [{}, { cookie: '' }, { cookie: '   ' }]) {
     assert.throws(
-      () => resolveCookie({}),
+      () => resolveCookie(config),
       (error) => error instanceof CitrusError && error.code === 'no_credential'
     );
-  } finally {
-    if (previous === undefined) delete process.env.DSH_HOME;
-    else process.env.DSH_HOME = previous;
-    rmSync(home, { recursive: true, force: true });
   }
 });
