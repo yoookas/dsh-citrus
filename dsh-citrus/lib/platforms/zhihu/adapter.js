@@ -8,6 +8,7 @@ import { TtlCache } from '../../core/cache.js';
 import { CitrusError } from '../../core/errors.js';
 import { PacedHttpClient } from '../../core/http.js';
 import { makePage, nowIso } from '../../core/model.js';
+import { PAGE_MAX, PLATFORM_BOUNDS } from '../registry.js';
 import * as endpoints from './endpoints.js';
 import * as normalize from './normalize.js';
 
@@ -24,10 +25,11 @@ export const BROWSER_HEADERS = {
 const RAW_TTL = 300000;
 const COMMENT_TTL = 120000;
 
-export const MAX_HOT = 30;
-export const MAX_SEARCH = 100;
-export const MAX_COMMENTS = 100;
-const MAX_PAGE = 10;
+// 取数上限就是配置里的上限：两边不再各写一份，免得调了配置却仍被这里卡住。
+const bounds = PLATFORM_BOUNDS.zhihu;
+const MAX_HOT = bounds.hotLimit[1];
+const MAX_SEARCH = bounds.searchLimit[1];
+const MAX_COMMENTS = bounds.commentLimit[1];
 const SEARCH_PAGE_BUDGET = 6;
 const COMMENT_PAGE_BUDGET = 8;
 
@@ -146,7 +148,7 @@ export class ZhihuAdapter {
     const text = String(query || '').trim();
     if (!text) throw new CitrusError('bad_request', '需要一个查询关键词。', '例如 query="大模型"。');
     const count = clamp(limit, 1, MAX_SEARCH, 20);
-    const page = clamp(options.page, 1, MAX_PAGE, 1);
+    const page = clamp(options.page, 1, PAGE_MAX, 1);
     const wanted = String(options.kind || '').trim().toLowerCase();
 
     const items = [];
@@ -342,7 +344,7 @@ export class ZhihuAdapter {
     const resolved = this.resolve(ref, options.kind, options.id);
     let kind = resolved.kind === 'unknown' ? 'answer' : resolved.kind;
     const count = clamp(options.limit, 1, MAX_COMMENTS, 20);
-    const page = clamp(options.page, 1, MAX_PAGE, 1);
+    const page = clamp(options.page, 1, PAGE_MAX, 1);
     const offset = (page - 1) * count;
 
     return this.cached('comments:' + kind + ':' + resolved.id + ':' + count + ':' + offset + ':' + order, COMMENT_TTL,

@@ -14,10 +14,13 @@
 | `zhihu_hot` | 知乎热榜、今天在讨论什么 | `limit`（1-30） |
 | `zhihu_search` | 找某个话题下的问题/回答/文章/用户 | `query`、`limit`、`kind` |
 | `zhihu_read` | 读问题或回答正文（问题会带高赞回答） | `ref`、`with_answers`、`content_chars` |
-| `zhihu_comments` | 评论区怎么看、有哪些不同意见 | `ref`、`limit`、`sort` |
-| `zhihu_status` | 排查「装没装好 / 设置生效没有」：返回命名空间、client bundle、Loader 条目和当前值 | 无 |
+| `zhihu_comments` | 评论区怎么看、有哪些不同意见（只支持回答） | `ref`（answer id）、`limit`、`page`、`sort` |
+| `zhihu_status` | 排查「装没装好 / 设置生效没有」：返回命名空间、client bundle 和当前值 | 无 |
 
 另外，当工具在当前会话可见时，会往系统提示词里加一句「知乎内容要现场抓，别凭记忆编」。
+
+> `zhihu_comments` 只对**回答**有效。知乎的问题级评论接口要求浏览器签名，插件拿不到正文；
+> 想看某个问题的评论，先用 `zhihu_read` 读该问题，它列出的每条高赞回答后面都带 `answer:<id>`。
 
 `ref` 认这些写法：`https://www.zhihu.com/question/123`、
 `https://www.zhihu.com/question/123/answer/456`、`answer:456`、`question:123`、`p:789`、纯数字。
@@ -28,11 +31,11 @@
 
 ### 方式一：从 Release 装（推荐）
 
-打开 [Releases](https://github.com/yoookas/dsh-citrus/releases)，复制最新那个
-`dsh-citrus-<版本>.tgz` 的链接，粘到 DSH 的「插件 → 安装插件」：
+打开 [Releases](https://github.com/yoookas/dsh-citrus/releases) 页面，复制最新那个
+`dsh-citrus-<版本>.tgz` 的下载链接，粘到 DSH 的「插件 → 安装插件」。链接形如：
 
 ```
-https://github.com/yoookas/dsh-citrus/releases/download/v26.11.20/dsh-citrus-26.11.20.tgz
+https://github.com/yoookas/dsh-citrus/releases/download/v<版本>/dsh-citrus-<版本>.tgz
 ```
 
 `.tgz` 也可以先下载到本地，再贴绝对路径安装。
@@ -144,10 +147,10 @@ node <DSH_HOME>/plugins/dsh-citrus/bin/cli.mjs status
 | `platforms.zhihu.commentChars` | 200 | 单条评论字数上限（40-800） |
 | `platforms.zhihu.excerptChars` | 120 | 列表摘要字数上限（20-600） |
 | `platforms.zhihu.relatedAnswers` | 3 | 读问题时附带几条高赞回答（0-5） |
-| `platforms.zhihu.gapMs` | 350 | 请求最小间隔；别长期设 0，那是给自己找风控 |
-| `platforms.zhihu.jitterMs` | 250 | 请求随机抖动 |
-| `platforms.zhihu.timeoutMs` | 20000 | 单次上游请求超时 |
-| `platforms.zhihu.maxRetries` | 2 | 429/5xx/网络错误重试次数 |
+| `platforms.zhihu.gapMs` | 350 | 请求最小间隔（0-10000）；别长期设 0，那是给自己找风控 |
+| `platforms.zhihu.jitterMs` | 250 | 请求随机抖动（0-10000） |
+| `platforms.zhihu.timeoutMs` | 20000 | 单次上游请求超时（1000-120000） |
+| `platforms.zhihu.maxRetries` | 2 | 429/5xx/网络错误重试次数（0-5） |
 | `platforms.zhihu.promptHint` | true | 是否注入系统提示词指引 |
 
 ### 加一个平台要动哪儿
@@ -207,7 +210,7 @@ cd dsh-citrus
 # 宿主包解析：本地开发时把 <DSH_HOME>/profiles/<profile>/node_modules 链接成 node_modules
 # Windows: mklink /J node_modules %USERPROFILE%\.dsh\profiles\desktop\node_modules
 
-npm test                       # 45 个离线用例（假知乎 + 假 React，不联网）
+npm test                       # 47 个离线用例（假知乎 + 假 React，不联网）
 node --check lib/index.js      # 语法检查
 node --check lib/client.js
 ```

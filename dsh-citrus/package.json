@@ -1,6 +1,6 @@
 {
   "name": "dsh-citrus",
-  "version": "26.11.22",
+  "version": "26.11.23",
   "description": "知乎热榜 / 问题 / 回答 / 评论采集插件（DeepSeek Harness）",
   "type": "module",
   "main": "lib/index.js",

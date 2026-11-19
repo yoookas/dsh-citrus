@@ -36,6 +36,10 @@ window.__ModuleLoader__.load({
      *   toggle —— 开关；总是写布尔值，要回默认用「恢复默认」
      *
      * 字段路径一律是 ["platforms", <平台 id>, <key>]。
+     *
+     * 注意：这里是浏览器 bundle，加载不到 lib/platforms/registry.js，
+     * 所以 min/max 只能写字面量。改上下界时两份都要改——
+     * tests/client.test.mjs 会把它和 registry 的 PLATFORM_BOUNDS 逐项比对。
      */
     const PLATFORMS = [
       {
@@ -51,7 +55,7 @@ window.__ModuleLoader__.load({
           },
           { kind: "number", key: "hotLimit", label: "热榜条数", hint: "1-30；知乎热榜不给翻页，30 就是上限。", min: 1, max: 30 },
           { kind: "number", key: "searchLimit", label: "搜索条数", hint: "1-20。", min: 1, max: 20 },
-          { kind: "number", key: "commentLimit", label: "评论条数", hint: "1-100；上游每页只给 10/20 条。", min: 1, max: 100 },
+          { kind: "number", key: "commentLimit", label: "评论条数", hint: "1-100；上游每页最多 20 条，插件会自动翻页。", min: 1, max: 100 },
           { kind: "number", key: "contentChars", label: "单条正文字数上限", hint: "200-16000；太长会撑爆上下文。", min: 200, max: 16000 },
           { kind: "number", key: "commentChars", label: "单条评论字数上限", hint: "40-800。", min: 40, max: 800 },
           { kind: "number", key: "excerptChars", label: "列表摘要字数上限", hint: "20-600。", min: 20, max: 600 },

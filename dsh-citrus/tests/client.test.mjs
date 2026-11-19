@@ -7,6 +7,8 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { PLATFORM_BOUNDS, PLATFORM_DEFAULTS } from '../lib/platforms/registry.js';
 
 /** 极简 hook 运行时：state 在多次 render 之间保留，其余 hook 每次重置。 */
 function createReact() {
@@ -194,6 +196,38 @@ test('Host serve 命名空间后，注册 settings.section 与 plugins.row.confi
     !registrations.some((entry) => entry.options.name === 'plugins.item'),
     'plugins.item 是官方插件分组，第三方 bundle 不该占用'
   );
+});
+
+test('面板的字段与上下界和 registry 一致（面板加载不到宿主模块，只能靠这条守住）', () => {
+  const source = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8');
+  const panel = new Map();
+  const re = /\{\s*kind:\s*"number",\s*key:\s*"(\w+)"[^}]*?min:\s*(-?\d+),\s*max:\s*(-?\d+)/g;
+  let match;
+  while ((match = re.exec(source))) panel.set(match[1], [Number(match[2]), Number(match[3])]);
+
+  assert.deepEqual(
+    [...panel.keys()].sort(),
+    Object.keys(PLATFORM_BOUNDS.zhihu).sort(),
+    '面板的数字字段列表要和 PLATFORM_BOUNDS 完全对应'
+  );
+  for (const [key, bounds] of Object.entries(PLATFORM_BOUNDS.zhihu)) {
+    assert.deepEqual(panel.get(key), bounds, `字段 ${key} 的 min/max 和 registry 不一致`);
+  }
+});
+
+test('面板每个字段在 schema 默认值里都有一份', async () => {
+  const source = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8');
+  const keys = new Set();
+  const re = /key:\s*"(\w+)"/g;
+  let match;
+  while ((match = re.exec(source))) keys.add(match[1]);
+
+  for (const key of keys) {
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(PLATFORM_DEFAULTS.zhihu, key),
+      `面板字段 ${key} 在 PLATFORM_DEFAULTS 里没有默认值`
+    );
+  }
 });
 
 test('平台以 tab 呈现：一个平台一个页签', async () => {

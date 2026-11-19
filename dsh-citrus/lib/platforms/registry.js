@@ -17,6 +17,7 @@ export const PLATFORM_IDS = ['zhihu'];
  */
 export const PLATFORM_DEFAULTS = {
   zhihu: {
+    cookie: '',
     hotLimit: 10,
     searchLimit: 8,
     commentLimit: 20,
@@ -29,6 +30,32 @@ export const PLATFORM_DEFAULTS = {
     timeoutMs: 20000,
     maxRetries: 2,
     promptHint: true
+  }
+};
+
+/** 翻页上限：页数再多上游也没有内容了（适配器和工具层的 clamp 都用它）。 */
+export const PAGE_MAX = 10;
+
+/**
+ * 各平台字段的取值上下界，写成 [min, max]。
+ *
+ * schema（lib/config.js）和工具层（lib/tools.js）都从这里取。
+ * 面板（lib/client.js）是独立 bundle、加载不到宿主模块，那边只能写字面量，
+ * 由 tests/client.test.mjs 比对两者，防止改了一处忘了另一处。
+ */
+export const PLATFORM_BOUNDS = {
+  zhihu: {
+    hotLimit: [1, 30],
+    searchLimit: [1, 20],
+    commentLimit: [1, 100],
+    contentChars: [200, 16000],
+    commentChars: [40, 800],
+    excerptChars: [20, 600],
+    relatedAnswers: [0, 5],
+    gapMs: [0, 10000],
+    jitterMs: [0, 10000],
+    timeoutMs: [1000, 120000],
+    maxRetries: [0, 5]
   }
 };
 

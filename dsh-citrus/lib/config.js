@@ -16,37 +16,40 @@
  */
 
 import z from '@deepseek-ai/schemastery';
-import { PLATFORM_DEFAULTS } from './platforms/registry.js';
+import { PLATFORM_BOUNDS, PLATFORM_DEFAULTS } from './platforms/registry.js';
 
-/** 默认值只在 registry 里写一份，schema 和工具层都从它取。 */
+/** 默认值和上下界都只在 registry 里写一份，schema 和工具层都从它取。 */
 const zhihu = PLATFORM_DEFAULTS.zhihu;
+const bounds = PLATFORM_BOUNDS.zhihu;
+
+/** 按 registry 的上下界给一个自然数补 min/max。 */
+const bounded = (key) => z.natural().default(zhihu[key]).min(bounds[key][0]).max(bounds[key][1]);
 
 /**
  * 各家平台共有的连接与节流设置。
  * 每个平台一份：不同站点的限流策略不该互相牵连。
- * @param {object} defaults 该平台的默认值
  */
-const transportFields = (defaults) => ({
-  gapMs: z.natural().default(defaults.gapMs).max(10000).description('请求最小间隔（毫秒）。别长期设 0，那是给自己找风控'),
-  jitterMs: z.natural().default(defaults.jitterMs).max(10000).description('请求随机抖动（毫秒）'),
-  timeoutMs: z.natural().default(defaults.timeoutMs).min(1000).max(120000).description('单次上游请求超时（毫秒）'),
-  maxRetries: z.natural().default(defaults.maxRetries).max(5).description('429/5xx/网络错误的重试次数')
+const transportFields = () => ({
+  gapMs: bounded('gapMs').description('请求最小间隔（毫秒）。别长期设 0，那是给自己找风控'),
+  jitterMs: bounded('jitterMs').description('请求随机抖动（毫秒）'),
+  timeoutMs: bounded('timeoutMs').description('单次上游请求超时（毫秒）'),
+  maxRetries: bounded('maxRetries').description('429/5xx/网络错误的重试次数')
 });
 
 /** 知乎：登录态 + 各工具默认条数。 */
 export const ZhihuConfig = z.object({
-  cookie: z.string().role('secret').default('').description(
+  cookie: z.string().role('secret').default(zhihu.cookie).description(
     '知乎 Cookie：粘贴浏览器里的 Copy as cURL（也认 Cookie 头 / 裸 Cookie 串 / JSON）。留空则读 <DSH_HOME>/dsh-citrus/zhihu.cookie（dsh-citrus auth 写入的那份）。'
   ),
-  hotLimit: z.natural().default(zhihu.hotLimit).min(1).max(30).description('热榜默认条数（知乎热榜最多 30 条，不给翻页）'),
-  searchLimit: z.natural().default(zhihu.searchLimit).min(1).max(20).description('搜索默认条数'),
-  commentLimit: z.natural().default(zhihu.commentLimit).min(1).max(100).description('评论默认条数'),
-  contentChars: z.natural().default(zhihu.contentChars).min(200).max(16000).description('单条正文字数上限'),
-  commentChars: z.natural().default(zhihu.commentChars).min(40).max(800).description('单条评论字数上限'),
-  excerptChars: z.natural().default(zhihu.excerptChars).min(20).max(600).description('列表摘要字数上限'),
-  relatedAnswers: z.natural().default(zhihu.relatedAnswers).min(0).max(5).description('读问题时附带几条高赞回答'),
+  hotLimit: bounded('hotLimit').description('热榜默认条数（知乎热榜最多 30 条，不给翻页）'),
+  searchLimit: bounded('searchLimit').description('搜索默认条数'),
+  commentLimit: bounded('commentLimit').description('评论默认条数'),
+  contentChars: bounded('contentChars').description('单条正文字数上限'),
+  commentChars: bounded('commentChars').description('单条评论字数上限'),
+  excerptChars: bounded('excerptChars').description('列表摘要字数上限'),
+  relatedAnswers: bounded('relatedAnswers').description('读问题时附带几条高赞回答'),
   promptHint: z.boolean().default(zhihu.promptHint).description('消息提到知乎时，在系统提示词里提醒模型调用工具'),
-  ...transportFields(zhihu)
+  ...transportFields()
 });
 
 export const Config = z.object({

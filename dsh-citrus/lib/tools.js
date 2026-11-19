@@ -12,7 +12,7 @@
 
 import { writeFileSync } from 'node:fs';
 import { friendlyMessage } from './core/errors.js';
-import { PLATFORM_DEFAULTS, platformConfig } from './platforms/registry.js';
+import { PAGE_MAX, PLATFORM_BOUNDS, PLATFORM_DEFAULTS, platformConfig } from './platforms/registry.js';
 import { dataDir, defaultCookieFile, readCookieFile } from './store.js';
 import {
   renderComments, renderHot, renderItem, renderSearch, summarizeItem
@@ -22,8 +22,11 @@ const INT = (description) => ({ type: 'integer', description });
 const STR = (description) => ({ type: 'string', description });
 const BOOL = (description) => ({ type: 'boolean', description });
 
-/** 条数/字数的兜底值；和 schema 默认值是同一份（registry.js）。 */
+/** 条数/字数的兜底值与上下界，和 schema 同一份（registry.js）。 */
 const DEFAULTS = PLATFORM_DEFAULTS.zhihu;
+const BOUNDS = PLATFORM_BOUNDS.zhihu;
+/** 给参数说明用的「a-b」区间文本。 */
+const range = (key) => BOUNDS[key][0] + '-' + BOUNDS[key][1];
 
 function toolFailure(error) {
   return new Error(friendlyMessage(error));
@@ -106,13 +109,14 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
   const config = () => (typeof getConfig === 'function' ? getConfig() : getConfig) || {};
   /** 知乎那一段配置：所有条数/字数都从这里取，平台字段的层级只在 registry.js 出现一次。 */
   const platform = () => platformConfig(config(), 'zhihu');
-  const limit = (key, low, high) => clampInt(platform()[key], DEFAULTS[key], low, high);
+  /** 取某个配置字段，按 registry 的上下界夹紧。 */
+  const limit = (key) => clampInt(platform()[key], DEFAULTS[key], BOUNDS[key][0], BOUNDS[key][1]);
 
   ctx.tools.register(defineTool({
     name: 'zhihu_hot',
     description: '获取知乎实时热榜。当用户问「知乎热榜」「今天知乎在讨论什么」「最近有什么热门话题」时调用。返回标题、热度、摘要和链接。',
     parameters: {
-      limit: INT('返回条数，1-30。知乎热榜不给翻页，30 就是上限。')
+      limit: INT('返回条数，' + range('hotLimit') + '。知乎热榜不给翻页，' + BOUNDS.hotLimit[1] + ' 就是上限。')
     },
     output: {
       schema: { type: 'json' },
@@ -126,7 +130,7 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
           const report = jsonSafe(collectDiagnostics(ctx, platform()));
           return { ...report, markdown: JSON.stringify(report, null, 2) };
         }
-        const count = clampInt(args.limit, limit('hotLimit', 1, 30), 1, 30);
+        const count = clampInt(args.limit, limit('hotLimit'), ...BOUNDS.hotLimit);
         const page = await runtime.adapter().hot(count, { signal: exec.signal });
         return {
           platform: 'zhihu',
@@ -135,7 +139,7 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
           items: page.items.map(summarizeItem),
           markdown: renderHot(page, {
             maxItems: count,
-            excerptChars: limit('excerptChars', 20, 600)
+            excerptChars: limit('excerptChars')
           })
         };
       } catch (error) {
@@ -149,7 +153,7 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
     description: '在知乎里搜索问题、回答、文章和用户。当用户对某个话题不熟悉、想找特定讨论、或需要多个来源时调用。返回标题、摘要和链接。',
     parameters: {
       query: { ...STR('搜索关键词，例如「大模型」或「AI 取代程序员」'), required: true },
-      limit: INT('返回条数，1-20'),
+      limit: INT('返回条数，' + range('searchLimit')),
       kind: STR('可选：只保留某一类结果（answer / article / question / user）')
     },
     output: {
@@ -162,7 +166,7 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
       try {
         const query = String(args.query || '').trim();
         if (!query) throw new Error('没有给搜索关键词。');
-        const count = clampInt(args.limit, limit('searchLimit', 1, 20), 1, 20);
+        const count = clampInt(args.limit, limit('searchLimit'), ...BOUNDS.searchLimit);
         const page = await runtime.adapter().search(query, count, {
           kind: String(args.kind || ''),
           signal: exec.signal
@@ -176,7 +180,7 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
           ...(page.errors ? { errors: page.errors } : {}),
           markdown: renderSearch({ ...page, query }, {
             maxItems: count,
-            excerptChars: limit('excerptChars', 20, 600)
+            excerptChars: limit('excerptChars')
           })
         };
       } catch (error) {
@@ -191,7 +195,7 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
     parameters: {
       ref: { ...STR('知乎链接（question/answer/article）或带前缀的 id（answer:123）'), required: true },
       with_answers: BOOL('读问题时是否附带同问题下的高赞回答，默认 true'),
-      content_chars: INT('正文截断字数，200-16000')
+      content_chars: INT('正文截断字数，' + range('contentChars'))
     },
     output: {
       schema: { type: 'json' },
@@ -203,14 +207,14 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
       try {
         const ref = String(args.ref || '').trim();
         if (!ref) throw new Error('没有给知乎链接或 id。');
-        const chars = clampInt(args.content_chars, limit('contentChars', 200, 16000), 200, 16000);
+        const chars = clampInt(args.content_chars, limit('contentChars'), ...BOUNDS.contentChars);
         const withAnswers = args.with_answers === undefined ? true : Boolean(args.with_answers);
         const item = await runtime.adapter().item(ref, {
           related: withAnswers,
           contentLimit: chars,
           signal: exec.signal
         });
-        const related = limit('relatedAnswers', 0, 5);
+        const related = limit('relatedAnswers');
         return {
           platform: 'zhihu',
           kind: item.kind,
@@ -261,10 +265,11 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
 
   ctx.tools.register(defineTool({
     name: 'zhihu_comments',
-    description: '读取某条知乎问题或回答下面的评论。当用户想知道「评论区怎么看」「大家有什么不同意见」「有哪些反对声音」时调用。',
+    description: '读取某条知乎回答下面的评论。当用户想知道「评论区怎么看」「大家有什么不同意见」「有哪些反对声音」时调用。注意：知乎的问题级评论需要浏览器签名，插件读不到；要读评论请用具体回答的 id（zhihu_read 的输出里，每条高赞回答后面带 answer:<id>）。',
     parameters: {
-      ref: { ...STR('知乎链接（question/answer/article）或带前缀的 id（answer:123）'), required: true },
-      limit: INT('返回评论条数，1-100'),
+      ref: { ...STR('知乎回答链接或 answer:123 这样的 id（zhihu_read 的输出里带这个 id）'), required: true },
+      limit: INT('返回评论条数，' + range('commentLimit')),
+      page: INT('第几页，1 起（配合 limit 翻页；返回里的 has_more 表示还有没有下一页）'),
       sort: {
         type: 'string',
         enum: ['hot', 'new'],
@@ -281,10 +286,11 @@ export function registerTools(ctx, getConfig, runtime, defineTool) {
       try {
         const ref = String(args.ref || '').trim();
         if (!ref) throw new Error('没有给知乎链接或 id。');
-        const count = clampInt(args.limit, limit('commentLimit', 1, 100), 1, 100);
+        const count = clampInt(args.limit, limit('commentLimit'), ...BOUNDS.commentLimit);
         const sort = String(args.sort || 'hot').toLowerCase() === 'new' ? 'new' : 'hot';
         const page = await runtime.adapter().comments(ref, {
           limit: count,
+          page: clampInt(args.page, 1, 1, PAGE_MAX),
           sort,
           signal: exec.signal
         });
