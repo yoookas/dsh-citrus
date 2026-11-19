@@ -107,7 +107,9 @@ export class MockUpstream {
       res.end(JSON.stringify({ error: { message: 'not found' } }));
       return;
     }
-    const body = typeof route.body === 'string' ? route.body : JSON.stringify(route.body);
+    const body = typeof route.body === 'function'
+      ? JSON.stringify(route.body(url))
+      : typeof route.body === 'string' ? route.body : JSON.stringify(route.body);
     res.writeHead(route.status || 200, { 'content-type': route.contentType || 'application/json; charset=utf-8' });
     res.end(body);
   }

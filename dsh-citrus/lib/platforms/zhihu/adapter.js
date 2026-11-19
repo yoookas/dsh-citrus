@@ -357,6 +357,8 @@ export class ZhihuAdapter {
     let emptyButTotal = null;
     let answered = false;
     let chosen = null;
+    // 上游明确说过 is_end：之后不会再有内容了。
+    let exhausted = false;
     const items = [];
     const seen = new Set();
     let cursor = offset;
@@ -411,10 +413,17 @@ export class ZhihuAdapter {
         items.push(row);
       }
 
+      // 一页不满 limit 不代表到头：知乎会折叠/删除部分评论，
+      // 上游只回 19 条时后面往往还有几十条。只有 is_end 才算完。
+      // 游标按「请求的页大小」前进：被折叠的条目在上游的 offset 空间里仍占位，
+      // 按返回行数推进会跳过中间的条目（也会让重复行把游标带偏）。
+      const returned = Array.isArray(payload.data) ? payload.data.length : chunk.length;
       const cap = endpoints.COMMENT_PAGE_CAPS[chosen || 'legacy'] || 20;
-      if (!fresh.length || chunk.length < Math.min(want, cap)) break;
-      cursor += chunk.length;
-      if (total !== null && cursor >= total) break;
+      const step = Math.min(want, cap);
+      const isEnd = Boolean(payload.paging && payload.paging.is_end);
+      if (isEnd) exhausted = true;
+      if (isEnd || returned === 0) break;
+      cursor += step;
     }
 
     // 有「200 但空」的诊断就报它：比上游 404 更能说明该怎么做。
@@ -435,7 +444,9 @@ export class ZhihuAdapter {
     }
     return makePage(rows, {
       page,
-      hasMore: hasMore(total, offset, rows.length, count),
+      // 上游已经 is_end，或者这一页没凑满请求量，就都算到头了：
+      // totals 常常大于实际可取条数（折叠/删除的不返回），不能只按总数判断。
+      hasMore: !exhausted && rows.length >= count && hasMore(total, offset, rows.length, count),
       source: 'comments',
       total,
       errors

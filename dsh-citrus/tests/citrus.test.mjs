@@ -189,6 +189,31 @@ test('评论：旧接口给空数组但报了总数时，改走 v5', async () =>
   });
 });
 
+test('评论：翻页不受「这一页不满」影响，直到上游 is_end', async () => {
+  await withUpstream(async (upstream) => {
+    // 知乎会折叠/删除部分评论：每页实际返回值不定长，第二页只有 19 条也不能当成结尾。
+    const pages = { 0: [20, false], 20: [19, false], 40: [13, true] };
+    upstream.route('/api/v4/answers/111/comments', (url) => {
+      const offset = Number(url.searchParams.get('offset') || 0);
+      const [count, isEnd] = pages[offset] || [0, true];
+      const data = Array.from({ length: count }, (_, index) => ({
+        id: String(10000 + offset + index),
+        content: '<p>评论 ' + (offset + index) + '</p>',
+        author: { name: '路人' },
+        vote_count: 1,
+        reply_count: 0,
+        created_time: 1700000000
+      }));
+      return { data, paging: { is_end: isEnd, totals: 52 } };
+    });
+
+    const page = await adapterFor(upstream).comments('answer:111', { limit: 100 });
+    assert.equal(page.count, 52, '三页要全部拿到');
+    assert.equal(page.total, 52);
+    assert.equal(page.has_more, false, '上游 is_end 之后不该再说有下一页');
+  });
+});
+
 test('评论：问题维度读不到正文时给出可行动的错误', async () => {
   await withUpstream(async (upstream) => {
     upstream.route('/api/v4/comment_v5/questions/222/root_comment', { data: [], paging: { totals: 18 } });
