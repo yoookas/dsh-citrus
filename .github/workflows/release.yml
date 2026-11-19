@@ -53,17 +53,19 @@ jobs:
             fi
             echo "按 tag 发版：$VERSION"
           else
-            PREFIX="$(date +%y.%m)"
+            VERSION_PREFIX="$(date +%y.%m)"
             MAX=0
-            for tag in $(git tag -l "v${PREFIX}.*"); do
+            for tag in $(git tag -l "v${VERSION_PREFIX}.*"); do
               n="${tag##*.}"
               n=$((10#$n))
               if [ "$n" -gt "$MAX" ]; then MAX=$n; fi
             done
             TT="$(printf "%02d" $((MAX + 1)))"
-            VERSION="${PREFIX}.${TT}"
-            echo "自动编号：$PREFIX 第 $TT 次"
+            VERSION="${VERSION_PREFIX}.${TT}"
+            echo "自动编号：$VERSION_PREFIX 第 $TT 次"
           fi
+          # 两种触发方式都要有月份前缀：tag 触发时从版本号里取，别只在 dispatch 分支里定义。
+          PREFIX="${VERSION%.*}"
           # 新仓库可能没有历史 tag：以 package.json 里的同月版本号为下限，避免版本回退
           CURRENT="$(node -p "require('./dsh-citrus/package.json').version")"
           CURRENT_PREFIX="${CURRENT%.*}"
